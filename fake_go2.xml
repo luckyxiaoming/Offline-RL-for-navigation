@@ -1,0 +1,1229 @@
+<mujoco model="indoor">
+    <compiler angle="radian" coordinate="local" inertiafromgeom="true"/>
+    <option timestep="0.1" iterations="4" />
+
+
+    <default>
+        <joint armature="0" damping="1"/>
+         <geom contype="0" conaffinity="0" condim="3" density="5.0" friction="1 0.5 0.5"/>
+
+         <default class="borderpost">
+            <geom type="box" size="9.9 0.2 2" material="matmarble"/>
+        </default>
+        <default class="roof">
+            <geom type="box" size="10 10 0.2" rgba=".3 .55 .55 0.4"/>
+        </default>
+        <default class="object1">
+            <geom type="capsule" material="object1" size="0.5 0.2"/>
+        </default>
+        <default class="object2">
+            <geom type="ellipsoid" material="object2" size="0.5 0.3 0.7"/>
+        </default>
+        <default class="object3">
+            <geom type="box" material="object3" size="0.2 0.2 0.2"/>
+        </default>
+
+        <default class="object4">
+            <geom type="cylinder" material="object4" size="0.5 0.5" condim="4" friction="1 .01 .01"/>
+        </default>
+
+        <default class="object5">
+            <geom type="sphere" material="object5" size="0.5"/>
+        </default>
+
+        <default class="object6">
+            <geom type="capsule" material="object1" size="0.05 0.02"/>
+        </default>
+        <default class="object7">
+            <geom type="ellipsoid" material="object2" size="0.05 0.03 0.07"/>
+        </default>
+        <default class="object8">
+            <geom type="box" material="object3" size="0.05 0.03 0.05"/>
+        </default>
+
+        <default class="object9">
+            <geom type="cylinder" material="object4" size="0.07 0.05" condim="4" friction="1 .01 .01"/>
+        </default>
+
+        <default class="object10">
+            <geom type="sphere" material="object5" size="0.05"/>
+        </default>
+
+
+
+    </default>
+
+    <asset>
+        <texture name="texgeom" type="cube" builtin="flat" mark="cross" width="128" height="128"
+            rgb1="0.6 0.6 0.6" rgb2="0.6 0.6 0.6" markrgb="1 1 1"/>
+        <texture name="texmarble" type="cube" file="marble.png"/>
+        <material name="matmarble" texture="texmarble" rgba=".7 .7 .7 1"/>
+        <texture builtin="gradient" height="100" rgb1="1 1 1" rgb2="0 0 0" type="skybox" width="100"/>
+        <texture builtin="flat" height="1278" mark="cross" markrgb="1 1 1" name="texgeom1" random="0.01" rgb1="0.8 0.6 0.4" rgb2="0.8 0.6 0.4" type="cube" width="127"/>
+        <texture builtin="checker" height="100" name="texplane" rgb1="0.6 0.6 0.6" rgb2="0.4 0.4 0.4" type="2d" width="100"/>
+        <material name="MatPlane" reflectance="0" shininess="0.2" specular="0.5" texrepeat="40 40" texture="texplane"/>
+        <material name="geom" texture="texgeom" texuniform="true"/>
+        <material name='object1' texture="texgeom" texuniform="true" rgba=".4 .9 .6 1" />
+        <material name='object2' texture="texgeom" texuniform="true" rgba=".4 .6 .9 1" />
+        <material name='object3' texture="texgeom" texuniform="true" rgba=".4 .9 .9 1" />
+        <material name='object4' texture="texgeom" texuniform="true" rgba=".8 .6 .8 1" />
+        <material name='object5' texture="texgeom" texuniform="true" rgba=".9 .1 .1 1" />
+
+
+      </asset>
+
+    <worldbody>
+        
+
+        <!--geom class="roof" pos="0 0 4" euler="0 0 0"/-->
+        <geom class="borderpost" pos="0 10 2" euler="0 0 0" rgba=".6 .5 .4 1"/>
+        <geom class="borderpost" pos="0 -10 2" euler="0 0 0" rgba=".6 .5 .4 1"/>
+        <geom class="borderpost" pos="10 0 2" euler="0 0 1.5708" rgba=".5 .4 .7 1"/>
+        <geom class="borderpost" pos="-10 0 2" euler="0 0 1.5708" rgba=".5 .4 .7 1"/>
+
+
+      
+  
+
+
+        <light cutoff="80" diffuse="1 1 1" dir="-0 0 -1.3" directional="true" exponent="5" pos="0 1 1.3" specular=".1 .1 .1"/>
+        <light pos="5 0 5" diffuse="1 1 1" specular="1 1 1" intensity="50"/>
+        <geom conaffinity="1" condim="3" material="MatPlane" name="floor" pos="0 0 0" size="10 10 10" type="plane" rgba="0.5 0.5 0.5 1.0"/>
+        <body name="fake_go2" pos="0 0 0.3" mocap="true">
+            <geom name="fake_go2_geom" pos="0 0 0" size="0.01 0.01 0.3" type="box" rgba=".8 .7 .3 1"/>
+            <body>
+                <joint/>
+                <camera name="came" mode="fixed" resolution="256 256" euler="1.57 -1.57 0" orthographic="false" fovy="30"/>
+                <geom name="body_came" pos="0 0 1.5" size="0.1 0.1 0.1" type="box"/>
+            </body>
+        </body>
+
+
+        <body name="GodView" pos="0 0 15">
+            <camera name="godcame" mode="fixed" resolution="1080 1080" quat="1 0 0 0" fovy="70"/>
+        </body>
+
+
+
+
+
+
+        <body pos="-6 6 0.2" quat="-0.632456 -0.632456 0.316228 0.316228">
+            <joint/>
+            <geom class="object1" rgba=".4 .6 .9 1"/>
+        </body>
+        <body pos="-3 6 0.1" quat="-0.5547 -0.5547 0.5547 0.27735">
+            <joint/>
+            <geom class="object1" rgba=".4 .9 .9 1"/>
+        </body>
+        <body pos="2 6 0.3" quat="-0.471405 -0.471405 0.707107 0.235702">
+            <joint/>
+            <geom class="object1" rgba=".9 .1 .1 1"/>
+        </body>
+        <body pos="6 6 0.4" quat="-0.471405 -0.471405 0.707107 0.235702">
+            <joint/>
+            <geom class="object1"/>
+        </body>
+
+        <body pos="-6 3 0.3" quat="-0.377964 -0.755929 0.377964 0.377964">
+            <joint/>
+            <geom class="object2" rgba=".4 .9 .6 1"/>
+        </body>
+        <body pos="-2 3 0.2" quat="-0.316228 -0.632456 0.632456 0.316228">
+            <joint/>
+            <geom class="object2" rgba=".4 .9 .9 1"/>
+        </body>
+        <body pos="2 3 0.2" quat="-0.258199 -0.516398 0.774597 0.258199">
+            <joint/>
+            <geom class="object2"/>
+        </body>
+        <body pos="6 3 0.2" quat="-0.258199 -0.516398 0.774597 0.258199">
+            <joint/>
+            <geom class="object2" rgba=".9 .1 .1 1"/>
+        </body>
+
+        <body pos="-6 0 0" quat="0 -0.816497 0.408248 0.408248">
+            <joint/>
+            <geom class="object3" rgba=".4 .6 .9 1"/>
+        </body>
+        <body pos="-2 0 0" quat="0 -0.666667 0.666667 0.333333">
+            <joint/>
+            <geom class="object3" rgba=".4 .9 .6 1"/>
+        </body>
+        <body pos="2 0 0.2" quat="0 -0.534522 0.801784 0.267261">
+            <joint/>
+            <geom class="object3"/>
+        </body>
+        <body pos="6 0 0.1" quat="0 -0.534522 0.801784 0.267261">
+            <joint/>
+            <geom class="object3" rgba=".9 .1 .1 1"/>
+        </body>
+
+
+        <body pos="-6 -3 0" quat="0.377964 -0.755929 0.377964 0.377964">
+            <joint/>
+            <geom class="object4" rgba=".4 .6 .9 1"/>
+        </body>
+        <body pos="-2 -3 0" quat="0.316228 -0.632456 0.632456 0.316228">
+            <joint/>
+            <geom class="object4" rgba=".9 .1 .1 1"/>
+        </body>
+        <body pos="2 -3 0.2" quat="0.258199 -0.516398 0.774597 0.258199">
+            <joint/>
+            <geom class="object4" rgba=".4 .9 .9 1"/>
+        </body>
+        <body pos="6 -3 0.1" quat="0.258199 -0.516398 0.774597 0.258199">
+            <joint/>
+            <geom class="object4"/>
+        </body>
+
+        <body pos="-6 -6 0.5" quat="0.632456 -0.632456 0.316228 0.316228">
+            <joint/>
+            <geom class="object5" rgba=".4 .6 .9 1"/>
+        </body>
+        <body pos="-2 -6 0.5" quat="0.5547 -0.5547 0.5547 0.27735">
+            <joint/>
+            <geom class="object5" rgba=".4 .9 .6 1"/>
+        </body>
+        <body pos="2 -6 0.5" quat="0.471405 -0.471405 0.707107 0.235702">
+            <joint/>
+            <geom class="object5" rgba=".4 .9 .9 1"/>
+        </body>
+        <body pos="6 -6 0.4" quat="0.471405 -0.471405 0.707107 0.235702">
+            <joint/>
+            <geom class="object5"/>
+        </body>
+
+
+
+        <body pos="-1.77 -8.80 0.08" quat="0.380990 0.639594 -0.558686 0.365563">
+            <joint/>
+            <geom class="object9" rgba="0.78 0.72 0.06 0.82" />
+        </body>
+    
+
+        <body pos="-0.11 5.99 0.08" quat="-0.078356 -0.163085 0.592656 -0.784871">
+            <joint/>
+            <geom class="object9" rgba="0.99 0.19 0.34 0.92" />
+        </body>
+    
+
+        <body pos="-7.63 -9.36 0.08" quat="0.633710 -0.325476 -0.346480 0.610269">
+            <joint/>
+            <geom class="object7" rgba="0.78 0.96 0.96 0.94" />
+        </body>
+    
+
+        <body pos="3.43 4.15 0.08" quat="-0.078396 0.783101 0.231344 0.571915">
+            <joint/>
+            <geom class="object8" rgba="0.88 0.63 0.67 0.96" />
+        </body>
+    
+
+        <body pos="-0.60 -4.95 0.08" quat="-0.339245 0.264513 0.815014 -0.388197">
+            <joint/>
+            <geom class="object8" rgba="0.84 0.17 0.35 0.81" />
+        </body>
+    
+
+        <body pos="0.59 -5.96 0.08" quat="0.661675 0.461315 -0.459945 0.371248">
+            <joint/>
+            <geom class="object6" rgba="0.78 0.65 0.40 0.96" />
+        </body>
+    
+
+        <body pos="9.19 -2.01 0.08" quat="-0.194755 0.304710 -0.452815 0.814973">
+            <joint/>
+            <geom class="object10" rgba="0.22 0.40 0.11 0.83" />
+        </body>
+    
+
+        <body pos="-3.44 -6.60 0.08" quat="0.298662 0.051283 0.759192 0.576020">
+            <joint/>
+            <geom class="object6" rgba="0.18 0.77 0.84 0.87" />
+        </body>
+    
+
+        <body pos="6.10 -4.70 0.08" quat="0.635872 -0.579997 0.506369 -0.053492">
+            <joint/>
+            <geom class="object10" rgba="0.28 0.11 0.10 0.98" />
+        </body>
+    
+
+        <body pos="-6.51 8.02 0.08" quat="-0.583889 -0.076005 -0.582774 0.560064">
+            <joint/>
+            <geom class="object8" rgba="0.07 0.35 0.72 0.97" />
+        </body>
+    
+
+        <body pos="8.92 1.17 0.08" quat="-0.238110 -0.726271 -0.485898 0.423954">
+            <joint/>
+            <geom class="object6" rgba="0.41 0.97 0.41 0.87" />
+        </body>
+    
+
+        <body pos="-3.82 -4.76 0.08" quat="-0.489983 0.860043 -0.036210 -0.137591">
+            <joint/>
+            <geom class="object9" rgba="0.78 0.02 0.23 0.81" />
+        </body>
+    
+
+        <body pos="-6.78 6.44 0.08" quat="0.740490 0.645733 0.153131 -0.106080">
+            <joint/>
+            <geom class="object8" rgba="0.64 0.01 0.59 0.98" />
+        </body>
+    
+
+        <body pos="9.51 -9.06 0.08" quat="-0.032844 0.482354 -0.522110 0.702607">
+            <joint/>
+            <geom class="object10" rgba="0.70 0.19 0.20 0.84" />
+        </body>
+    
+
+        <body pos="-8.59 -4.42 0.08" quat="0.562827 -0.060976 -0.668523 -0.482271">
+            <joint/>
+            <geom class="object9" rgba="0.40 0.17 0.47 0.81" />
+        </body>
+    
+
+        <body pos="-1.48 8.76 0.08" quat="0.813308 0.253807 0.495426 0.169304">
+            <joint/>
+            <geom class="object10" rgba="0.72 0.65 0.37 0.94" />
+        </body>
+    
+
+        <body pos="-1.10 4.45 0.08" quat="-0.485642 0.632061 -0.497256 -0.342618">
+            <joint/>
+            <geom class="object8" rgba="0.59 0.52 0.13 0.92" />
+        </body>
+    
+
+        <body pos="2.94 5.53 0.08" quat="-0.257812 0.463777 0.842748 0.090659">
+            <joint/>
+            <geom class="object6" rgba="0.57 0.23 0.42 0.83" />
+        </body>
+    
+
+        <body pos="-1.15 -3.44 0.08" quat="-0.295988 0.294513 -0.216414 0.882507">
+            <joint/>
+            <geom class="object8" rgba="0.97 0.94 0.53 0.89" />
+        </body>
+    
+
+        <body pos="8.60 2.48 0.08" quat="-0.063496 -0.210681 0.289482 0.931548">
+            <joint/>
+            <geom class="object6" rgba="0.29 0.90 0.90 0.91" />
+        </body>
+    
+
+        <body pos="-6.35 0.96 0.08" quat="0.750288 0.295683 0.316752 0.499307">
+            <joint/>
+            <geom class="object9" rgba="0.40 0.14 0.30 0.92" />
+        </body>
+    
+
+        <body pos="4.60 -8.16 0.08" quat="-0.366550 -0.415911 -0.285337 -0.781819">
+            <joint/>
+            <geom class="object10" rgba="0.58 0.26 0.54 0.81" />
+        </body>
+    
+
+        <body pos="-0.04 -5.87 0.08" quat="0.221779 -0.333010 0.594290 0.697666">
+            <joint/>
+            <geom class="object10" rgba="0.53 0.90 0.33 0.90" />
+        </body>
+    
+
+        <body pos="-0.16 8.03 0.08" quat="-0.435847 -0.418547 0.792879 -0.078732">
+            <joint/>
+            <geom class="object8" rgba="0.50 0.32 0.93 0.89" />
+        </body>
+    
+
+        <body pos="8.45 -7.09 0.08" quat="-0.027091 0.635895 -0.668770 0.384254">
+            <joint/>
+            <geom class="object10" rgba="0.07 0.80 0.17 0.84" />
+        </body>
+    
+
+        <body pos="-10.00 -2.54 0.08" quat="-0.700098 -0.291181 -0.039537 0.650779">
+            <joint/>
+            <geom class="object6" rgba="0.44 0.94 0.54 0.99" />
+        </body>
+    
+
+        <body pos="-0.02 -5.72 0.08" quat="-0.469630 0.527162 -0.491886 -0.509506">
+            <joint/>
+            <geom class="object9" rgba="1.00 0.30 0.28 0.86" />
+        </body>
+    
+
+        <body pos="-8.41 2.84 0.08" quat="-0.482934 -0.307465 -0.815086 0.088740">
+            <joint/>
+            <geom class="object8" rgba="0.06 0.76 0.18 0.95" />
+        </body>
+    
+
+        <body pos="-7.48 3.86 0.08" quat="0.537088 -0.094031 0.523179 0.654965">
+            <joint/>
+            <geom class="object6" rgba="0.28 0.97 0.64 0.98" />
+        </body>
+    
+
+        <body pos="1.60 5.08 0.08" quat="0.151105 -0.218665 0.427547 0.864035">
+            <joint/>
+            <geom class="object9" rgba="0.83 0.27 0.65 0.85" />
+        </body>
+    
+
+        <body pos="8.22 -6.56 0.08" quat="-0.303227 0.029770 -0.753565 -0.582500">
+            <joint/>
+            <geom class="object7" rgba="0.38 0.60 0.51 0.85" />
+        </body>
+    
+
+        <body pos="-8.12 7.20 0.08" quat="-0.709038 0.666288 -0.199217 -0.116787">
+            <joint/>
+            <geom class="object7" rgba="0.48 0.45 0.25 0.89" />
+        </body>
+    
+
+        <body pos="5.00 -3.23 0.08" quat="-0.584541 0.325724 -0.660660 -0.340212">
+            <joint/>
+            <geom class="object7" rgba="0.55 0.84 0.07 0.99" />
+        </body>
+    
+
+        <body pos="5.44 7.85 0.08" quat="-0.628447 -0.260090 -0.016572 0.732893">
+            <joint/>
+            <geom class="object10" rgba="0.08 0.69 0.06 0.96" />
+        </body>
+    
+
+        <body pos="-4.33 0.26 0.08" quat="0.366689 -0.637815 0.651052 -0.186716">
+            <joint/>
+            <geom class="object6" rgba="0.73 0.18 0.41 0.84" />
+        </body>
+    
+
+        <body pos="-6.71 0.16 0.08" quat="-0.458505 -0.870519 -0.131911 0.120701">
+            <joint/>
+            <geom class="object7" rgba="0.28 0.76 0.19 0.88" />
+        </body>
+    
+
+        <body pos="1.35 -2.91 0.08" quat="0.602529 -0.137555 -0.783226 0.067785">
+            <joint/>
+            <geom class="object9" rgba="0.59 0.18 0.19 0.98" />
+        </body>
+    
+
+        <body pos="2.84 -5.97 0.08" quat="0.361131 -0.596064 0.713660 -0.070585">
+            <joint/>
+            <geom class="object9" rgba="0.64 0.89 0.29 0.85" />
+        </body>
+    
+
+        <body pos="-2.59 2.40 0.08" quat="-0.900493 0.433995 0.023031 0.015154">
+            <joint/>
+            <geom class="object10" rgba="0.31 0.66 0.54 0.87" />
+        </body>
+    
+
+        <body pos="-7.19 3.77 0.08" quat="-0.729518 -0.134811 -0.239112 0.626462">
+            <joint/>
+            <geom class="object8" rgba="0.94 0.76 0.59 0.87" />
+        </body>
+    
+
+        <body pos="-8.56 7.75 0.08" quat="0.751522 0.418277 -0.043829 -0.508269">
+            <joint/>
+            <geom class="object7" rgba="0.18 0.47 0.49 0.85" />
+        </body>
+    
+
+        <body pos="-1.88 -3.19 0.08" quat="0.263106 -0.845002 0.274585 0.375966">
+            <joint/>
+            <geom class="object6" rgba="0.28 0.42 0.06 0.86" />
+        </body>
+    
+
+        <body pos="6.14 -6.37 0.08" quat="-0.493648 0.486742 -0.717142 0.071422">
+            <joint/>
+            <geom class="object10" rgba="0.62 0.25 0.52 0.88" />
+        </body>
+    
+
+        <body pos="-2.08 2.81 0.08" quat="0.668666 0.389193 0.620901 0.126081">
+            <joint/>
+            <geom class="object8" rgba="0.77 0.22 0.59 0.88" />
+        </body>
+    
+
+        <body pos="3.40 -4.88 0.08" quat="-0.691149 0.524631 0.490963 -0.077662">
+            <joint/>
+            <geom class="object8" rgba="0.49 0.67 0.21 0.80" />
+        </body>
+    
+
+        <body pos="-9.38 6.97 0.08" quat="0.194554 -0.581240 -0.790065 0.010332">
+            <joint/>
+            <geom class="object6" rgba="0.36 0.65 0.27 0.89" />
+        </body>
+    
+
+        <body pos="0.54 6.18 0.08" quat="0.166512 -0.236297 0.733382 -0.615295">
+            <joint/>
+            <geom class="object8" rgba="0.42 0.41 0.35 0.88" />
+        </body>
+    
+
+        <body pos="2.07 8.14 0.08" quat="-0.658686 -0.257149 0.671153 0.222623">
+            <joint/>
+            <geom class="object8" rgba="0.18 0.49 0.54 0.91" />
+        </body>
+    
+
+        <body pos="5.89 -0.29 0.08" quat="-0.249810 0.181812 -0.566974 -0.763596">
+            <joint/>
+            <geom class="object6" rgba="0.57 0.07 0.57 0.94" />
+        </body>
+    
+
+        <body pos="9.41 1.77 0.08" quat="-0.333014 -0.088897 -0.137197 0.928642">
+            <joint/>
+            <geom class="object10" rgba="0.12 0.16 0.86 0.95" />
+        </body>
+    
+
+        <body pos="-4.93 2.89 0.08" quat="-0.560900 0.444273 0.608993 -0.342258">
+            <joint/>
+            <geom class="object6" rgba="0.98 0.24 0.33 0.84" />
+        </body>
+    
+
+        <body pos="-4.51 -9.73 0.08" quat="0.544257 -0.515517 0.513382 -0.417691">
+            <joint/>
+            <geom class="object8" rgba="0.85 0.51 0.02 0.96" />
+        </body>
+    
+
+        <body pos="-9.79 7.19 0.08" quat="-0.254254 -0.467677 -0.605420 -0.591692">
+            <joint/>
+            <geom class="object6" rgba="0.79 0.75 0.87 0.89" />
+        </body>
+    
+
+        <body pos="-2.92 -0.43 0.08" quat="0.544186 -0.428614 -0.358473 0.625818">
+            <joint/>
+            <geom class="object8" rgba="0.11 0.48 0.29 0.82" />
+        </body>
+    
+
+        <body pos="-0.42 5.92 0.08" quat="0.504785 0.683537 -0.517517 0.100728">
+            <joint/>
+            <geom class="object7" rgba="0.84 0.81 0.25 0.95" />
+        </body>
+    
+
+        <body pos="-8.49 3.73 0.08" quat="0.338047 -0.779132 -0.512712 0.125711">
+            <joint/>
+            <geom class="object8" rgba="0.10 0.29 0.32 0.89" />
+        </body>
+    
+
+        <body pos="-7.70 -4.49 0.08" quat="0.333113 -0.466316 -0.335084 -0.747866">
+            <joint/>
+            <geom class="object6" rgba="0.40 0.62 0.52 0.89" />
+        </body>
+    
+
+        <body pos="3.54 -6.17 0.08" quat="0.627493 -0.361342 0.675678 0.138358">
+            <joint/>
+            <geom class="object6" rgba="0.47 0.54 0.32 0.92" />
+        </body>
+    
+
+        <body pos="6.33 -8.88 0.08" quat="-0.618468 0.450301 -0.123270 0.632085">
+            <joint/>
+            <geom class="object10" rgba="0.31 0.17 0.23 0.92" />
+        </body>
+    
+
+        <body pos="7.59 -0.18 0.08" quat="-0.371420 -0.485703 0.262078 0.746629">
+            <joint/>
+            <geom class="object8" rgba="0.98 0.71 0.84 0.91" />
+        </body>
+    
+
+        <body pos="-3.20 1.30 0.08" quat="-0.032237 0.474358 -0.077939 0.876282">
+            <joint/>
+            <geom class="object8" rgba="0.06 0.14 0.46 0.87" />
+        </body>
+    
+
+        <body pos="6.77 6.59 0.08" quat="-0.202818 0.643050 -0.494990 -0.548030">
+            <joint/>
+            <geom class="object8" rgba="0.52 0.83 0.66 0.88" />
+        </body>
+    
+
+        <body pos="-0.54 -1.71 0.08" quat="0.679502 -0.192531 -0.196972 0.680008">
+            <joint/>
+            <geom class="object9" rgba="0.74 0.72 0.29 0.86" />
+        </body>
+    
+
+        <body pos="-5.73 5.37 0.08" quat="-0.617150 -0.328384 0.185714 0.690507">
+            <joint/>
+            <geom class="object6" rgba="0.68 0.73 0.40 0.97" />
+        </body>
+    
+
+        <body pos="1.71 3.97 0.08" quat="-0.427226 -0.521404 0.529553 0.514965">
+            <joint/>
+            <geom class="object6" rgba="0.03 0.47 0.90 0.91" />
+        </body>
+    
+
+        <body pos="-5.35 3.69 0.08" quat="0.734479 -0.655686 0.095384 -0.146690">
+            <joint/>
+            <geom class="object6" rgba="0.86 0.03 0.41 0.90" />
+        </body>
+    
+
+        <body pos="-5.23 -5.65 0.08" quat="0.270796 -0.383195 -0.669750 -0.575558">
+            <joint/>
+            <geom class="object9" rgba="0.11 0.66 0.11 0.92" />
+        </body>
+    
+
+        <body pos="4.78 3.79 0.08" quat="-0.346685 0.280192 -0.655643 0.609454">
+            <joint/>
+            <geom class="object7" rgba="0.18 0.37 0.68 0.93" />
+        </body>
+    
+
+        <body pos="-6.41 -9.53 0.08" quat="0.419162 -0.630734 -0.637018 -0.143827">
+            <joint/>
+            <geom class="object9" rgba="0.59 0.17 0.51 0.90" />
+        </body>
+    
+
+        <body pos="-2.12 -8.79 0.08" quat="-0.492902 0.496872 -0.559959 0.443408">
+            <joint/>
+            <geom class="object6" rgba="0.63 0.29 0.17 0.92" />
+        </body>
+    
+
+        <body pos="2.29 2.23 0.08" quat="-0.286276 -0.234676 -0.852618 -0.368803">
+            <joint/>
+            <geom class="object9" rgba="0.81 0.67 0.73 0.81" />
+        </body>
+    
+
+        <body pos="-8.02 4.51 0.08" quat="-0.593338 0.132889 -0.529993 0.591099">
+            <joint/>
+            <geom class="object6" rgba="0.61 0.54 0.00 0.86" />
+        </body>
+    
+
+        <body pos="-1.32 -1.91 0.08" quat="0.050410 0.540727 -0.716824 0.437306">
+            <joint/>
+            <geom class="object7" rgba="0.29 0.42 0.56 0.88" />
+        </body>
+    
+
+        <body pos="-1.60 -3.68 0.08" quat="0.930832 0.119400 -0.053453 -0.341231">
+            <joint/>
+            <geom class="object8" rgba="0.59 0.68 0.89 0.98" />
+        </body>
+    
+
+        <body pos="1.85 -3.20 0.08" quat="-0.247922 0.601756 0.723647 0.229693">
+            <joint/>
+            <geom class="object9" rgba="0.49 0.72 0.71 0.87" />
+        </body>
+    
+
+        <body pos="-9.90 0.85 0.08" quat="0.292143 0.473074 0.214997 0.802888">
+            <joint/>
+            <geom class="object9" rgba="0.44 0.64 0.00 0.93" />
+        </body>
+    
+
+        <body pos="2.89 -9.35 0.08" quat="0.516568 -0.558199 0.173872 -0.625572">
+            <joint/>
+            <geom class="object6" rgba="0.66 0.66 0.30 0.88" />
+        </body>
+    
+
+        <body pos="-7.11 3.05 0.08" quat="0.476127 -0.499264 0.723163 -0.032765">
+            <joint/>
+            <geom class="object10" rgba="0.10 0.03 0.08 0.96" />
+        </body>
+    
+
+        <body pos="0.59 -5.22 0.08" quat="-0.301409 0.733692 -0.488296 0.363889">
+            <joint/>
+            <geom class="object6" rgba="0.81 0.82 0.73 0.83" />
+        </body>
+    
+
+        <body pos="9.66 -5.73 0.08" quat="0.738995 -0.535538 -0.117337 0.391558">
+            <joint/>
+            <geom class="object8" rgba="0.86 0.01 0.04 0.96" />
+        </body>
+    
+
+        <body pos="6.80 -2.87 0.08" quat="0.144947 0.664363 -0.475640 -0.558013">
+            <joint/>
+            <geom class="object6" rgba="0.53 0.69 0.79 0.88" />
+        </body>
+    
+
+        <body pos="8.50 7.94 0.08" quat="0.698547 0.173366 0.599500 0.350109">
+            <joint/>
+            <geom class="object6" rgba="0.91 0.35 0.09 0.85" />
+        </body>
+    
+
+        <body pos="-3.46 1.25 0.08" quat="0.004617 0.085088 0.393202 0.915495">
+            <joint/>
+            <geom class="object8" rgba="0.60 0.62 0.22 0.84" />
+        </body>
+    
+
+        <body pos="-1.59 6.11 0.08" quat="0.001268 -0.649531 0.678407 0.343324">
+            <joint/>
+            <geom class="object9" rgba="1.00 0.97 0.04 0.83" />
+        </body>
+    
+
+        <body pos="-2.87 2.28 0.08" quat="0.459287 -0.562824 -0.544307 -0.419540">
+            <joint/>
+            <geom class="object8" rgba="0.55 0.63 0.53 0.85" />
+        </body>
+    
+
+        <body pos="8.63 8.24 0.08" quat="0.642697 -0.754361 -0.066222 -0.116170">
+            <joint/>
+            <geom class="object8" rgba="0.85 0.97 0.89 0.98" />
+        </body>
+    
+
+        <body pos="-3.84 8.58 0.08" quat="0.119130 0.721348 -0.406529 0.547904">
+            <joint/>
+            <geom class="object6" rgba="0.96 0.13 0.32 0.96" />
+        </body>
+    
+
+        <body pos="5.60 2.93 0.08" quat="-0.045769 -0.740306 0.557683 0.372615">
+            <joint/>
+            <geom class="object7" rgba="0.91 0.43 0.32 0.87" />
+        </body>
+    
+
+        <body pos="-6.58 -6.67 0.08" quat="0.409700 0.503926 0.550056 0.525018">
+            <joint/>
+            <geom class="object10" rgba="0.81 0.42 0.81 0.81" />
+        </body>
+    
+
+        <body pos="5.12 9.32 0.08" quat="0.571041 -0.654239 0.480871 0.121020">
+            <joint/>
+            <geom class="object10" rgba="0.18 0.42 0.11 0.90" />
+        </body>
+    
+
+        <body pos="3.64 -9.26 0.08" quat="-0.912311 -0.187762 0.025676 -0.363009">
+            <joint/>
+            <geom class="object6" rgba="0.83 0.92 0.61 0.92" />
+        </body>
+    
+
+        <body pos="3.84 -7.43 0.08" quat="0.681550 0.309987 0.607623 -0.264938">
+            <joint/>
+            <geom class="object7" rgba="0.04 0.79 1.00 0.94" />
+        </body>
+    
+
+        <body pos="6.08 8.06 0.08" quat="-0.455545 -0.113403 0.676779 0.567088">
+            <joint/>
+            <geom class="object8" rgba="0.48 0.63 0.71 0.97" />
+        </body>
+    
+
+        <body pos="5.75 8.13 0.08" quat="0.798274 -0.577608 -0.167772 0.031306">
+            <joint/>
+            <geom class="object6" rgba="0.04 0.04 0.04 0.82" />
+        </body>
+    
+
+        <body pos="1.65 -8.31 0.08" quat="-0.056500 0.718876 0.637671 -0.270927">
+            <joint/>
+            <geom class="object10" rgba="0.82 0.26 0.50 0.89" />
+        </body>
+    
+
+        <body pos="6.64 4.86 0.08" quat="0.278029 0.022370 -0.849966 0.446943">
+            <joint/>
+            <geom class="object6" rgba="0.37 0.02 0.24 0.92" />
+        </body>
+    
+
+        <body pos="-8.69 -0.62 0.08" quat="0.375182 -0.001499 0.838941 0.394225">
+            <joint/>
+            <geom class="object7" rgba="0.47 0.29 0.70 0.88" />
+        </body>
+    
+
+        <body pos="-6.38 -6.02 0.08" quat="0.484206 0.688038 0.273132 -0.466420">
+            <joint/>
+            <geom class="object10" rgba="0.74 0.14 0.54 0.93" />
+        </body>
+    
+
+        <body pos="7.61 1.42 0.08" quat="-0.500110 0.456470 -0.530197 0.510310">
+            <joint/>
+            <geom class="object9" rgba="0.32 0.72 0.40 0.83" />
+        </body>
+    
+
+        <body pos="-3.71 -5.46 0.08" quat="0.722148 -0.005357 0.372947 0.582566">
+            <joint/>
+            <geom class="object7" rgba="0.91 0.62 0.26 0.80" />
+        </body>
+    
+
+        <body pos="-1.08 -7.31 0.08" quat="-0.804865 -0.336320 -0.393716 0.289945">
+            <joint/>
+            <geom class="object7" rgba="0.69 0.60 0.38 0.99" />
+        </body>
+    
+
+        <body pos="9.01 -7.17 0.08" quat="0.978002 -0.071072 -0.104412 0.166007">
+            <joint/>
+            <geom class="object9" rgba="0.39 0.06 0.80 0.98" />
+        </body>
+    
+
+        <body pos="0.92 7.97 0.08" quat="-0.703456 -0.126239 0.620777 0.322255">
+            <joint/>
+            <geom class="object10" rgba="0.56 0.92 0.53 0.81" />
+        </body>
+    
+
+        <body pos="-2.02 3.75 0.08" quat="0.138103 0.586040 0.561321 0.567807">
+            <joint/>
+            <geom class="object6" rgba="0.87 0.26 0.29 0.80" />
+        </body>
+    
+
+        <body pos="9.61 8.87 0.08" quat="0.235684 0.687898 -0.425689 0.538552">
+            <joint/>
+            <geom class="object7" rgba="0.13 0.76 0.82 0.93" />
+        </body>
+    
+
+        <body pos="-6.30 -1.63 0.08" quat="0.161035 -0.376454 -0.335060 -0.848578">
+            <joint/>
+            <geom class="object8" rgba="0.26 0.05 0.94 0.81" />
+        </body>
+    
+
+        <body pos="3.64 -9.78 0.08" quat="-0.922391 0.210950 -0.274808 -0.170809">
+            <joint/>
+            <geom class="object8" rgba="0.81 0.92 0.76 1.00" />
+        </body>
+    
+
+        <body pos="-8.01 1.85 0.08" quat="-0.143691 -0.775841 -0.504441 0.350662">
+            <joint/>
+            <geom class="object6" rgba="0.87 0.65 0.26 0.84" />
+        </body>
+    
+
+        <body pos="-3.72 -8.08 0.08" quat="-0.427395 0.649012 -0.521175 0.352836">
+            <joint/>
+            <geom class="object7" rgba="0.38 0.13 0.55 0.86" />
+        </body>
+    
+
+        <body pos="-1.16 -1.00 0.08" quat="0.720429 0.118531 -0.471281 -0.494799">
+            <joint/>
+            <geom class="object7" rgba="0.90 0.15 0.07 0.88" />
+        </body>
+    
+
+        <body pos="-2.73 -6.83 0.08" quat="0.264399 -0.067123 0.527634 -0.804481">
+            <joint/>
+            <geom class="object9" rgba="0.18 0.86 0.46 0.85" />
+        </body>
+    
+
+        <body pos="0.23 0.01 0.08" quat="0.614337 0.504812 -0.506833 -0.332980">
+            <joint/>
+            <geom class="object10" rgba="0.86 0.74 0.11 0.94" />
+        </body>
+    
+
+        <body pos="4.05 8.49 0.08" quat="-0.505704 0.716042 -0.479518 0.040119">
+            <joint/>
+            <geom class="object7" rgba="1.00 0.26 0.73 0.89" />
+        </body>
+    
+
+        <body pos="1.93 2.56 0.08" quat="-0.599843 0.059021 0.772812 -0.198663">
+            <joint/>
+            <geom class="object7" rgba="0.34 0.33 0.42 0.82" />
+        </body>
+    
+
+        <body pos="-8.77 4.40 0.08" quat="-0.634137 0.328557 -0.445767 0.539640">
+            <joint/>
+            <geom class="object6" rgba="0.91 0.11 0.38 0.86" />
+        </body>
+    
+
+        <body pos="4.70 8.42 0.08" quat="0.385063 -0.907385 0.159832 0.053227">
+            <joint/>
+            <geom class="object8" rgba="0.84 0.75 0.87 0.87" />
+        </body>
+    
+
+        <body pos="6.57 2.61 0.08" quat="-0.537914 0.401926 -0.224960 -0.706044">
+            <joint/>
+            <geom class="object7" rgba="0.41 0.10 0.32 0.94" />
+        </body>
+    
+
+        <body pos="-0.78 9.25 0.08" quat="-0.247045 -0.898269 -0.177611 -0.317074">
+            <joint/>
+            <geom class="object10" rgba="0.48 0.86 0.80 0.84" />
+        </body>
+    
+
+        <body pos="-6.85 1.70 0.08" quat="0.545952 -0.082457 0.582460 0.596555">
+            <joint/>
+            <geom class="object10" rgba="0.00 1.00 0.11 0.93" />
+        </body>
+    
+
+        <body pos="5.49 -5.50 0.08" quat="0.394086 -0.429941 0.384540 0.715525">
+            <joint/>
+            <geom class="object9" rgba="0.35 0.40 0.07 0.94" />
+        </body>
+    
+
+        <body pos="7.50 -5.69 0.08" quat="-0.057251 0.940794 0.332102 0.036560">
+            <joint/>
+            <geom class="object10" rgba="0.76 0.64 0.50 0.96" />
+        </body>
+    
+
+        <body pos="-6.70 1.60 0.08" quat="-0.311081 0.265853 -0.142913 0.901180">
+            <joint/>
+            <geom class="object8" rgba="0.03 0.65 0.99 0.93" />
+        </body>
+    
+
+        <body pos="7.15 6.05 0.08" quat="-0.810249 0.537469 0.187900 0.138987">
+            <joint/>
+            <geom class="object6" rgba="0.41 0.21 0.58 0.95" />
+        </body>
+    
+
+        <body pos="5.15 0.38 0.08" quat="0.068637 -0.214504 -0.913864 0.337830">
+            <joint/>
+            <geom class="object7" rgba="0.15 0.62 0.80 0.86" />
+        </body>
+    
+
+        <body pos="1.39 -6.08 0.08" quat="0.527188 0.396320 0.325107 -0.677723">
+            <joint/>
+            <geom class="object9" rgba="0.18 0.52 0.06 0.85" />
+        </body>
+    
+
+        <body pos="-5.08 -0.35 0.08" quat="-0.518541 -0.449139 0.696489 -0.210459">
+            <joint/>
+            <geom class="object8" rgba="0.13 0.50 0.01 0.94" />
+        </body>
+    
+
+        <body pos="0.63 7.73 0.08" quat="-0.168778 0.517483 -0.579589 -0.606467">
+            <joint/>
+            <geom class="object8" rgba="0.58 0.93 0.30 0.85" />
+        </body>
+    
+
+        <body pos="-9.98 4.79 0.08" quat="0.448697 0.723359 0.308654 0.424447">
+            <joint/>
+            <geom class="object6" rgba="0.41 0.45 0.35 0.90" />
+        </body>
+    
+
+        <body pos="6.13 -5.33 0.08" quat="0.553516 0.590318 0.576193 0.114656">
+            <joint/>
+            <geom class="object6" rgba="0.89 0.51 0.63 0.91" />
+        </body>
+    
+
+        <body pos="1.62 -2.99 0.08" quat="0.534740 0.818396 -0.090041 -0.190193">
+            <joint/>
+            <geom class="object9" rgba="0.43 0.05 0.95 0.89" />
+        </body>
+    
+
+        <body pos="6.45 1.72 0.08" quat="-0.136050 0.561610 -0.536867 0.614702">
+            <joint/>
+            <geom class="object8" rgba="0.77 0.19 0.42 0.82" />
+        </body>
+    
+
+        <body pos="-5.43 -1.36 0.08" quat="0.134788 0.132781 0.213401 0.958468">
+            <joint/>
+            <geom class="object10" rgba="0.55 0.98 0.73 0.85" />
+        </body>
+    
+
+        <body pos="8.75 4.40 0.08" quat="0.051127 -0.648359 -0.720575 0.240392">
+            <joint/>
+            <geom class="object9" rgba="0.92 0.91 0.42 0.85" />
+        </body>
+    
+
+        <body pos="-5.59 0.20 0.08" quat="0.866002 0.122442 -0.468852 0.123398">
+            <joint/>
+            <geom class="object8" rgba="0.08 0.18 0.75 0.90" />
+        </body>
+    
+
+        <body pos="2.72 9.81 0.08" quat="0.199056 0.858610 -0.282521 0.378614">
+            <joint/>
+            <geom class="object8" rgba="0.61 0.24 0.59 0.87" />
+        </body>
+    
+
+        <body pos="9.83 -5.74 0.08" quat="0.323546 0.665408 -0.663367 0.111780">
+            <joint/>
+            <geom class="object6" rgba="0.48 0.81 0.82 0.86" />
+        </body>
+    
+
+        <body pos="-9.54 -7.43 0.08" quat="-0.824558 0.011745 0.108475 0.555157">
+            <joint/>
+            <geom class="object10" rgba="0.91 0.00 0.56 0.92" />
+        </body>
+    
+
+        <body pos="-0.65 -8.71 0.08" quat="0.544735 -0.490034 0.193474 0.652456">
+            <joint/>
+            <geom class="object9" rgba="0.15 0.78 0.04 0.93" />
+        </body>
+    
+
+        <body pos="9.25 3.46 0.08" quat="-0.180398 -0.618727 -0.758263 -0.098335">
+            <joint/>
+            <geom class="object6" rgba="0.82 0.56 0.06 0.81" />
+        </body>
+    
+
+        <body pos="7.69 -8.82 0.08" quat="0.470772 0.860592 -0.172177 -0.090055">
+            <joint/>
+            <geom class="object9" rgba="0.96 0.26 0.92 0.90" />
+        </body>
+    
+
+        <body pos="-2.79 4.87 0.08" quat="-0.718051 0.390953 -0.563890 0.116562">
+            <joint/>
+            <geom class="object7" rgba="0.80 0.62 0.82 1.00" />
+        </body>
+    
+
+        <body pos="-9.64 -4.58 0.08" quat="0.377852 0.595325 0.038955 -0.708025">
+            <joint/>
+            <geom class="object6" rgba="0.26 0.20 0.49 0.86" />
+        </body>
+    
+
+        <body pos="8.19 2.13 0.08" quat="-0.037958 -0.875113 -0.112970 -0.469014">
+            <joint/>
+            <geom class="object7" rgba="0.72 0.75 0.40 0.89" />
+        </body>
+    
+
+        <body pos="-2.42 -4.36 0.08" quat="0.715484 -0.066793 -0.155811 -0.677750">
+            <joint/>
+            <geom class="object10" rgba="0.12 0.94 1.00 0.96" />
+        </body>
+    
+
+        <body pos="-1.94 -3.86 0.08" quat="-0.707922 -0.239234 0.306214 0.589786">
+            <joint/>
+            <geom class="object7" rgba="0.60 0.23 0.20 0.84" />
+        </body>
+    
+
+        <body pos="2.72 -3.44 0.08" quat="0.670332 -0.421131 0.599620 -0.117297">
+            <joint/>
+            <geom class="object6" rgba="0.10 0.30 0.49 0.89" />
+        </body>
+    
+
+        <body pos="4.12 3.59 0.08" quat="-0.604781 -0.449152 -0.230128 -0.616071">
+            <joint/>
+            <geom class="object9" rgba="0.90 0.94 0.01 0.99" />
+        </body>
+    
+
+        <body pos="7.50 0.10 0.08" quat="-0.821559 -0.182018 -0.251557 0.478153">
+            <joint/>
+            <geom class="object6" rgba="0.62 0.25 0.32 0.98" />
+        </body>
+    
+
+        <body pos="7.61 -1.42 0.08" quat="-0.347823 0.638531 0.347583 -0.592016">
+            <joint/>
+            <geom class="object6" rgba="0.12 0.08 0.47 0.94" />
+        </body>
+    
+
+        <body pos="-5.54 9.72 0.08" quat="0.344329 0.645624 -0.254233 -0.632434">
+            <joint/>
+            <geom class="object6" rgba="0.58 0.47 0.28 0.96" />
+        </body>
+    
+
+        <body pos="0.38 2.47 0.08" quat="-0.459376 0.644930 0.474775 -0.384224">
+            <joint/>
+            <geom class="object6" rgba="0.27 0.04 0.97 0.89" />
+        </body>
+    
+
+        <body pos="9.16 3.31 0.08" quat="-0.566307 0.553815 0.530835 -0.301329">
+            <joint/>
+            <geom class="object6" rgba="0.36 0.74 0.23 0.81" />
+        </body>
+    
+
+        <body pos="-2.55 -1.31 0.08" quat="0.787227 -0.433768 0.419336 -0.127579">
+            <joint/>
+            <geom class="object10" rgba="0.91 0.55 0.76 0.98" />
+        </body>
+    
+
+        <body pos="-8.67 2.61 0.08" quat="-0.669791 -0.350997 0.649409 0.080307">
+            <joint/>
+            <geom class="object7" rgba="0.44 0.69 0.21 0.95" />
+        </body>
+    
+
+        <body pos="0.18 -2.50 0.08" quat="0.349675 0.399697 -0.184860 -0.826920">
+            <joint/>
+            <geom class="object7" rgba="0.26 0.96 0.61 0.93" />
+        </body>
+    
+
+        <body pos="-6.17 5.39 0.08" quat="-0.058417 -0.351435 -0.702160 0.616484">
+            <joint/>
+            <geom class="object9" rgba="0.65 0.11 0.30 0.93" />
+        </body>
+    
+
+        <body pos="-6.86 5.69 0.08" quat="0.501270 -0.733049 -0.326053 0.324125">
+            <joint/>
+            <geom class="object10" rgba="0.34 0.98 0.53 0.85" />
+        </body>
+    
+
+        <body pos="8.30 7.52 0.08" quat="0.031282 -0.701742 0.372653 0.606391">
+            <joint/>
+            <geom class="object10" rgba="0.63 0.12 0.14 0.86" />
+        </body>
+    
+
+        <body pos="-0.40 2.95 0.08" quat="0.664533 0.346998 -0.578349 0.321715">
+            <joint/>
+            <geom class="object8" rgba="0.72 0.24 0.47 0.89" />
+        </body>
+    
+
+        <body pos="4.64 5.18 0.08" quat="0.585138 0.463631 -0.544593 -0.382202">
+            <joint/>
+            <geom class="object6" rgba="0.21 0.99 0.42 0.95" />
+        </body>
+    
+
+        <body pos="-9.80 -0.53 0.08" quat="-0.650504 -0.719265 0.008417 -0.243787">
+            <joint/>
+            <geom class="object10" rgba="0.72 0.75 0.38 0.93" />
+        </body>
+    
+
+        <body pos="-4.40 -4.64 0.08" quat="-0.434106 -0.482609 -0.716339 -0.255926">
+            <joint/>
+            <geom class="object10" rgba="0.77 0.02 0.78 0.91" />
+        </body>
+    
+
+        <body pos="7.85 -7.32 0.08" quat="0.510785 -0.434659 -0.736510 -0.087882">
+            <joint/>
+            <geom class="object9" rgba="0.29 0.45 0.19 0.90" />
+        </body>
+    
+
+        <body pos="6.39 -8.45 0.08" quat="0.671411 -0.586499 0.428706 0.146411">
+            <joint/>
+            <geom class="object7" rgba="0.36 0.99 0.33 0.91" />
+        </body>
+    
+
+        <body pos="0.35 -6.25 0.08" quat="0.100237 0.631109 -0.337485 0.691200">
+            <joint/>
+            <geom class="object6" rgba="0.02 0.55 0.82 0.97" />
+        </body>
+    
+
+        <body pos="-8.72 -6.96 0.08" quat="-0.083618 -0.408752 0.688436 -0.593284">
+            <joint/>
+            <geom class="object6" rgba="0.70 0.72 0.91 0.99" />
+        </body>
+    
+
+        <body pos="-8.92 -3.37 0.08" quat="-0.244709 -0.658615 0.692545 -0.163476">
+            <joint/>
+            <geom class="object6" rgba="0.77 0.71 0.87 0.85" />
+        </body>
+    
+
+        <body pos="6.52 5.22 0.08" quat="-0.242240 0.584306 0.301459 -0.713463">
+            <joint/>
+            <geom class="object9" rgba="0.40 0.50 0.72 0.83" />
+        </body>
+    
+
+        <body pos="0.15 4.48 0.08" quat="0.623925 -0.280663 0.034811 0.728515">
+            <joint/>
+            <geom class="object9" rgba="0.15 0.17 0.72 0.84" />
+        </body>
+    
+
+        <body pos="6.74 2.98 0.08" quat="-0.152982 0.077482 -0.811521 0.558594">
+            <joint/>
+            <geom class="object10" rgba="0.53 0.18 0.39 0.85" />
+        </body>
+    
+
+        <body pos="5.56 8.76 0.08" quat="0.503972 -0.632103 -0.488787 0.327942">
+            <joint/>
+            <geom class="object9" rgba="0.67 0.90 0.12 0.93" />
+        </body>
+
+
+    </worldbody>
+
+
+
+</mujoco>
