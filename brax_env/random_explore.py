@@ -34,7 +34,7 @@ obstacles = [
 
 
 def interpolate_path(current_pos, current_quat, next_pos, next_quat, steps):
-
+    steps = steps *10
     A = np.array(current_pos).squeeze()
     B = np.array(next_pos).squeeze()
     C = np.arcsin(current_quat[3].squeeze()) * 2  
@@ -66,7 +66,31 @@ def interpolate_path(current_pos, current_quat, next_pos, next_quat, steps):
     dx_values = vel_x(t_values)
     dy_values = vel_y(t_values)
     direction_values = np.arctan2(dy_values, dx_values)
-    return points, direction_values
+
+    actions = points[1:] - points[:-1]
+    dir_acts = direction_values[1:] - direction_values[:-1]
+    distances = np.sum(np.square(actions), axis=1)**0.5
+    new_point_list = []
+    new_direction_values_list = []
+    new_point_list.append(points[0])
+    new_direction_values_list.append(direction_values[0])
+    sum1 = 0
+    sum2 = 0
+    for i in range(steps-2):
+        sum1 += distances[i]
+        sum2 += abs(dir_acts[i])
+        if sum1 > 0.05 or sum2 > 0.05:
+            new_point_list.append(points[i-1])
+            new_direction_values_list.append(direction_values[i-1])
+            sum1 = distances[i]
+            sum2 = abs(dir_acts[i])
+    new_point_list.append(points[-1])
+    new_direction_values_list.append(direction_values[-1])
+    new_points = np.stack(new_point_list, axis=0) 
+    new_direction_values = np.stack(new_direction_values_list, axis=0)
+
+
+    return new_points, new_direction_values
 
 def step_controller(points, direction_values):
     actions = points[1:] - points[:-1]
@@ -81,7 +105,17 @@ def step_controller(points, direction_values):
         pos_list.append(points[i+1])
         quat_list.append(next_quat)
         distances_list.append(distances[i])
+        if dir_acts[i] > 6.1: 
+           dir_acts[i] = dir_acts[i] -2*jnp.pi
+        elif dir_acts[i] < -6.1: 
+           dir_acts[i] = dir_acts[i] + 2*jnp.pi
+           
+
+
         dir_list.append(dir_acts[i])
+        if abs(dir_acts[i]) > 0.08:
+           print('rotation too large!')
+           
 
     return pos_list, quat_list, distances_list, dir_list
 
@@ -93,7 +127,7 @@ def random_policy(key, current_quat=[1,0,0,0] ,max_distance=0.3, max_rotation=0.
     rotation = rotation + current_angle
     distance = jax.random.uniform(key[2], shape=(1,), minval=max_distance/2, maxval=max_distance)
     action = jnp.array([distance*jnp.cos(rotation), distance*jnp.sin(rotation)]).squeeze()
-    return action
+    return action, rotation
 
 def is_in_obstacle(point, obstacles):
     point = point.reshape([2,1])
@@ -123,16 +157,17 @@ def random_explore_policy(key, current_pos, current_quat):
     j += 1
     keys = jax.random.split(key, 5)
     key = keys[3]
+
     Rsign = jax.random.choice(keys[4], jnp.array([1, 2, 3, 4, 5]), shape=())
     if not Rsign == 1:
-      action = random_policy(keys, max_rotation=0.02, current_quat=current_quat)
+      action, new_angle = random_policy(keys, max_rotation=0.02, current_quat=current_quat)
     else:
-      action = random_policy(keys, max_distance=0.002 ,max_rotation=2, current_quat=current_quat, min_abs_rotation=True)
+      action, new_angle = random_policy(keys, max_distance=0.002 ,max_rotation=2, current_quat=current_quat, min_abs_rotation=True)
     next_pos = current_pos + action
     collision = is_in_obstacle(next_pos, obstacles)
 
   distance = jnp.sum(jnp.square(action))**0.5
-  new_angle = jnp.arctan2(action[1], action[0]).reshape([1])
+  #new_angle = jnp.arctan2(action[1], action[0]).reshape([1])
   next_quat = jnp.array([jnp.cos((new_angle)/2), [0], [0], jnp.sin((new_angle)/2)])
 
 

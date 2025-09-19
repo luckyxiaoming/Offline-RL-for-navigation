@@ -1,4 +1,5 @@
 import time
+
 import itertools
 import numpy as np
 from typing import Callable, NamedTuple, Optional, Union, List
@@ -12,8 +13,10 @@ import numpy as np
 import os
 from brax.io import mjcf
 from random_explore import random_explore_policy
-
+from transformers import AutoImageProcessor, AutoModel
+from PIL import Image
 import h5py
+import torch
 
 
 
@@ -32,12 +35,56 @@ def Navigation_environment(seeds:int, episode_size:int):
 
   frame_number = episode_size
 
-  frames_list = []
+  ###########################################################
+  ####################  prepare Dinov3#######################
+  ###########################################################
+ 
+
+  device = "cuda" if torch.cuda.is_available() else "cpu"
+  print("Device:", device)
+  model_id = "facebook/dinov3-convnext-small-pretrain-lvd1689m"
+  processor = AutoImageProcessor.from_pretrained(model_id)
+  model =   AutoModel.from_pretrained(model_id).to(device)
+
+  def cal_latent(obs):
+      image = Image.fromarray(obs)
+      inputs = processor(images=image, return_tensors="pt").to(device)
+      with torch.no_grad(): #
+          outputs = model(**inputs)
+      #last_hidden_state = outputs.last_hidden_state
+      pooler_output = outputs.pooler_output
+      return pooler_output.cpu().numpy()
+
+
+
+
   actions_list = []
+  position_list = []
+  quaterion_list = []
+ 
   key = jax.random.PRNGKey(seeds)
   mujoco.mj_resetData(mj_model, mj_data)
   current_pos = jnp.array([0, 0]).reshape([2,1])
-  current_quat = jnp.array([1, 0, 0, 0]).reshape([4,1])
+  rng = np.random.default_rng(seeds)  
+  random_angle = rng.uniform(-3.14, 3.14)
+
+  current_quat = jnp.array([jnp.cos(random_angle/2), 0, 0, jnp.sin(random_angle/2)]).reshape([4,1])
+
+  mj_data.mocap_pos = np.array([current_pos[0,1],current_pos[1,1], 0.3]).reshape([3])
+  mj_data.mocap_quat = np.array([current_quat]).reshape([4])
+  renderer.update_scene(mj_data, 'came')
+
+  pixels = renderer.render()
+  h, w, c= pixels.shape
+  images = np.empty((frame_number, h, w, c), dtype=int)
+  feature = cal_latent(pixels)
+  w, c= feature.shape
+  features = np.empty((frame_number, w, c))
+  
+  
+
+
+
   j = 0
   while j < frame_number:
 
@@ -46,7 +93,10 @@ def Navigation_environment(seeds:int, episode_size:int):
 
       renderer.update_scene(mj_data, 'came')
       pixels = renderer.render()
-      frames_list.append(pixels)
+      images[j] = pixels
+      feature = cal_latent(pixels)
+      features[j] = feature
+
 
       next_pos = i[0]
       next_quat = i[1]
@@ -56,35 +106,56 @@ def Navigation_environment(seeds:int, episode_size:int):
       current_quat = next_quat
       action = np.array([i[2], i[3]])
       actions_list.append(action)
+      position_list.append(current_pos)
+      quaterion_list.append(current_quat)
       mujoco.mj_step(mj_model, mj_data)
       j += 1
+      if j % 2000 == 0:
+        print(f"{j} frames have been collected!")
+      if j == frame_number:
+         break
 
-  images = np.stack(frames_list, axis=0)   # (N, H, W, C)
+
   actions = np.stack(actions_list, axis=0) 
-  return images, actions
+  positions = np.stack(position_list, axis=0)
+  quaternions = np.stack(quaterion_list, axis=0)
+  return images, features, actions, positions, quaternions
 
 
 
-def collect_mujoco_data(seeds, episode_size=1000, episode_num=2):
 
 
+def collect_mujoco_data(seeds, episode_size=1000, episode_num=1):
 
-  f = h5py.File("Navigation_Mujoco_datase.h5", "w")
-  for ep in range(episode_num): 
-    grp = f.create_group(f"episode_{ep}")
-    images, actions = Navigation_environment(seeds+ep, episode_size)
 
-    grp.create_dataset("images", data=images, compression="gzip")
-    grp.create_dataset("actions", data=actions)
-    print(f"The {ep} episodes clllection is done!")
+  for i in range(episode_num):
+    t1 = time.time()
+    newseeds = seeds+i
+    images, features, actions, positions, quaternions = Navigation_environment(newseeds, episode_size)
+
+    print("One episode time:", time.time() - t1)
+
+    with h5py.File("Navigation_Mujoco_dataset_full.h5", "a") as f:
+        a = list(f.keys())
+
+        grp = f.create_group(f"episode_{newseeds}")
+        grp.create_dataset("images", data=images, compression="gzip")
+        grp.create_dataset("features", data=features)
+        grp.create_dataset("actions", data=actions)
+        grp.create_dataset("positions", data=positions)
+        grp.create_dataset("quaternions", data=quaternions)
+        print(f"The seeds of {newseeds} episodes collection is done!")
+
 
   
-  f.close()
+  
+  
   print("Data collection is done!")
     
 
 
-collect_mujoco_data(seeds=1, episode_size=40000, episode_num=5)
+
+collect_mujoco_data(seeds=1, episode_size=10000, episode_num=8)
       
     
 
