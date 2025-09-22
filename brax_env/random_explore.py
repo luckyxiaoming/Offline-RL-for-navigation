@@ -3,8 +3,7 @@ import jax
 from jax import numpy as jnp
 import numpy as np
 from scipy.interpolate import CubicHermiteSpline
-
-
+from pyquaternion import Quaternion
 
 obstacles = [
     {"pos": jnp.array([-6, 6]), "radius": 1},
@@ -30,15 +29,23 @@ obstacles = [
 
 ]
 
-
+def cal_z_from_quat(Q):
+   '''Only for form of [q0, 0, 0, q3] '''
+   Q = np.array([Q]).reshape([4,])
+   q0 = Q[0] # cos(thet/2)
+   q3 = Q[3] # sin(thet/2)
+   sinthet = 2*q0*q3
+   costhet = q0**2 - q3**2
+   thet = np.atan2(sinthet,costhet)
+   return thet
 
 
 def interpolate_path(current_pos, current_quat, next_pos, next_quat, steps):
-    steps = steps *10
+    steps = steps * 20
     A = np.array(current_pos).squeeze()
     B = np.array(next_pos).squeeze()
-    C = np.arcsin(current_quat[3].squeeze()) * 2  
-    D = np.arcsin(next_quat[3].squeeze()) * 2     
+    C = cal_z_from_quat(current_quat)
+    D = cal_z_from_quat(next_quat)
     distance = np.square(B - A).sum()**0.5
         
     # calculate tangent vectors
@@ -120,7 +127,7 @@ def step_controller(points, direction_values):
     return pos_list, quat_list, distances_list, dir_list
 
 def random_policy(key, current_quat=[1,0,0,0] ,max_distance=0.3, max_rotation=0.8, min_abs_rotation=False):
-    current_angle = jnp.asin(current_quat[3]).reshape([1]) * 2
+    current_angle = cal_z_from_quat(current_quat)
     rotation = jax.random.uniform(key[1], shape=(1,), minval=-max_rotation, maxval=max_rotation)
     if min_abs_rotation:
         rotation = jnp.sign(rotation)*jax.random.uniform(key[1], shape=(1,), minval=0.707, maxval=max_rotation)
@@ -170,9 +177,8 @@ def random_explore_policy(key, current_pos, current_quat):
   #new_angle = jnp.arctan2(action[1], action[0]).reshape([1])
   next_quat = jnp.array([jnp.cos((new_angle)/2), [0], [0], jnp.sin((new_angle)/2)])
 
-
-
-  add_angle = new_angle - jnp.asin(current_quat[3]).reshape([1]) * 2
+  current_angle = cal_z_from_quat(current_quat) 
+  add_angle = new_angle - current_angle
   pos_list=[]
   quat_list=[]
   act_list=[]
@@ -184,4 +190,8 @@ def random_explore_policy(key, current_pos, current_quat):
   return key, pos_list, quat_list, distances_list, dir_list
     
 
+
+
+   
+    
 

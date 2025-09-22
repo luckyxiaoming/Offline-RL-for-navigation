@@ -17,6 +17,8 @@ from transformers import AutoImageProcessor, AutoModel
 from PIL import Image
 import h5py
 import torch
+from memory_profiler import profile
+import gc
 
 
 
@@ -24,7 +26,7 @@ import torch
 frames extraction function cannot work in brax env(MJX), so mujoco is used here.
 '''
 
-def Navigation_environment(seeds:int, episode_size:int):
+def Navigation_environment(seeds:int, episode_size:int, initial_pos):
   path  = os.getcwd() + '/fake_go2.xml'
   sys = mjcf.load(path)
 
@@ -64,7 +66,7 @@ def Navigation_environment(seeds:int, episode_size:int):
  
   key = jax.random.PRNGKey(seeds)
   mujoco.mj_resetData(mj_model, mj_data)
-  current_pos = jnp.array([0, 0]).reshape([2,1])
+  current_pos = jnp.array([initial_pos[0], initial_pos[1]]).reshape([2,1])
   rng = np.random.default_rng(seeds)  
   random_angle = rng.uniform(-3.14, 3.14)
 
@@ -124,19 +126,20 @@ def Navigation_environment(seeds:int, episode_size:int):
 
 
 
-
+@profile
 def collect_mujoco_data(seeds, episode_size=1000, episode_num=1):
 
+  initial_pos = [0,0]
 
   for i in range(episode_num):
     t1 = time.time()
     newseeds = seeds+i
-    images, features, actions, positions, quaternions = Navigation_environment(newseeds, episode_size)
+    images, features, actions, positions, quaternions = Navigation_environment(newseeds, episode_size, initial_pos)
+    initial_pos = [positions[-1,0], positions[-1,1]]
 
     print("One episode time:", time.time() - t1)
 
     with h5py.File("Navigation_Mujoco_dataset_full.h5", "a") as f:
-        a = list(f.keys())
 
         grp = f.create_group(f"episode_{newseeds}")
         grp.create_dataset("images", data=images, compression="gzip")
@@ -145,6 +148,8 @@ def collect_mujoco_data(seeds, episode_size=1000, episode_num=1):
         grp.create_dataset("positions", data=positions)
         grp.create_dataset("quaternions", data=quaternions)
         print(f"The seeds of {newseeds} episodes collection is done!")
+    
+    gc.collect()
 
 
   
@@ -155,7 +160,7 @@ def collect_mujoco_data(seeds, episode_size=1000, episode_num=1):
 
 
 
-collect_mujoco_data(seeds=1, episode_size=10000, episode_num=8)
+collect_mujoco_data(seeds=1, episode_size=2000, episode_num=30)
       
     
 
