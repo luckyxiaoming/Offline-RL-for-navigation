@@ -1,1 +1,1 @@
-# One-hour-training-policy-for-nevigation
+# Offline RL-for-nevigation
