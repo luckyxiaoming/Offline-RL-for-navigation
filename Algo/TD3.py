@@ -17,15 +17,15 @@ import numpy as np
 from brax import envs
 
 import time
-
+import matplotlib.pyplot as plt # p
 from IPython.display import HTML, clear_output
 from brax.training.acme import types 
 from flax import struct
 from typing import Any, Optional, Tuple
 import jax.numpy as jnp
 
-from Buffer import sample_flat_buffer
-from evaluation import evaluation
+from Buffer import sample_item_buffer
+from Mujoco_Navigation_ENV import Navigation_sim_environment
 
 
 
@@ -40,14 +40,14 @@ class Args:
     
     # wandb
     '''if _True_, this experiment will be tracked on Wandb'''
-    track: bool = True
-    wandb_project_name: str = 'OfflineRL_Navigation_Mujoco5'
+    track: bool = False
+    wandb_project_name: str = 'OfflineRL_Navigation_Mujoco11'
     wandb_entiti: str = None
 
     env_id: str = 'TD3_Navigation_Mujoco' 
 
     # Algorithm specific arguments
-    total_offline_steps: int = 500_000
+    total_offline_steps: int = 1_000_000
     '''the discount factor gamma'''
     gamma: float = 0.99
     '''the target network update rate'''
@@ -59,11 +59,13 @@ class Args:
     '''learning rate of the optimizer'''
     learning_rate: float = 3e-4
     '''the scale of policy_noise'''  
-    policy_noise: float = 0.2
+    policy_noise: float = 0
     '''the noise of policy clip'''
-    noise_clip: float = 0.5
+    noise_clip: float = 0.01
     '''Behavior Clone factor'''
-    alpha = 0.1
+    alpha = 0
+    '''done_threshold factor'''
+    done_threshold = 0.7
 
  
 
@@ -80,28 +82,28 @@ class QNetwork(eqx.Module):
         self.action_dim = action_dim
         self.proj_state = nn.Sequential([
             nn.Linear(in_features=obs_size, out_features=512, key=keys[0]),
-            nn.LayerNorm(shape=512),
+            nn.LayerNorm(shape=512, elementwise_affine=False),
             nn.Lambda(jax.nn.leaky_relu),
             nn.Linear(in_features=512, out_features=256, key=keys[1]),
-            nn.LayerNorm(shape=256),
+            nn.LayerNorm(shape=256, elementwise_affine=False),
             nn.Lambda(jax.nn.leaky_relu),
         ])
 
         self.proj_goal_state = nn.Sequential([
             nn.Linear(in_features=obs_size, out_features=512, key=keys[2]),
-            nn.LayerNorm(shape=512),
+            nn.LayerNorm(shape=512, elementwise_affine=False),
             nn.Lambda(jax.nn.leaky_relu),
             nn.Linear(in_features=512, out_features=256, key=keys[3]),
-            nn.LayerNorm(shape=256),
+            nn.LayerNorm(shape=256, elementwise_affine=False),
             nn.Lambda(jax.nn.leaky_relu),
         ])
 
         self.trunk = nn.Sequential([
             nn.Linear(in_features=256 * 2 + action_dim, out_features=512, key=keys[4]),
-            nn.LayerNorm(shape=512),
+            nn.LayerNorm(shape=512, elementwise_affine=False),
             nn.Lambda(jax.nn.leaky_relu),
             nn.Linear(in_features=512, out_features=512, key=keys[5]),
-            nn.LayerNorm(shape=512),
+            nn.LayerNorm(shape=512, elementwise_affine=False),
             nn.Lambda(jax.nn.leaky_relu),
             nn.Linear(in_features=512, out_features= 256, key=keys[6]),
             nn.Lambda(jax.nn.leaky_relu),
@@ -144,38 +146,38 @@ class Actor(eqx.Module):
         last_layer = eqx.tree_at(
             where=lambda l: l.weight,
             pytree=last_layer,
-            replace_fn=lambda w: jnp.zeros_like(w)
+            replace_fn=lambda w: w * 1e-5
         )
         last_layer = eqx.tree_at(
             where=lambda l: l.bias,
             pytree=last_layer,
-            replace_fn=lambda b: jnp.zeros_like(b)
+            replace_fn=lambda b: b * 1e-5
         )
 
         self.proj_state = nn.Sequential([
             nn.Linear(in_features=obs_size, out_features=512, key=keys[1]),
-            nn.LayerNorm(shape=512),
+            nn.LayerNorm(shape=512, elementwise_affine=False),
             nn.Lambda(jax.nn.leaky_relu),
             nn.Linear(in_features=512, out_features=256, key=keys[2]),
-            nn.LayerNorm(shape=256),
+            nn.LayerNorm(shape=256, elementwise_affine=False),
             nn.Lambda(jax.nn.leaky_relu),
         ])
 
         self.proj_goal_state = nn.Sequential([
             nn.Linear(in_features=obs_size, out_features=512, key=keys[3]),
-            nn.LayerNorm(shape=512),
+            nn.LayerNorm(shape=512, elementwise_affine=False),
             nn.Lambda(jax.nn.leaky_relu),
             nn.Linear(in_features=512, out_features=256, key=keys[4]),
-            nn.LayerNorm(shape=256),
+            nn.LayerNorm(shape=256, elementwise_affine=False),
             nn.Lambda(jax.nn.leaky_relu),
         ])
 
         self.trunk = nn.Sequential([
             nn.Linear(in_features=256 * 2, out_features=512, key=keys[5]),
-            nn.LayerNorm(shape=512),
+            nn.LayerNorm(shape=512, elementwise_affine=False),
             nn.Lambda(jax.nn.leaky_relu),
             nn.Linear(in_features=512, out_features=256, key=keys[6]),
-            nn.LayerNorm(shape=256),
+            nn.LayerNorm(shape=256, elementwise_affine=False),
             nn.Lambda(jax.nn.leaky_relu),
             last_layer,
             nn.Lambda(jax.nn.tanh),
@@ -217,19 +219,20 @@ class TD3(object):
         # this is modified for _tanh_ 
         action_scale = (action_high - action_low)/2
         action_bias =  (action_high + action_low)/2
+        self.action_scale = action_scale
+        if args.track:
+            self.wandb_log_A = {
 
-        self.wandb_log_A = {
-
-            "BC_value_pi_action":0,
-            "grad_norm":0,
-            'lambda*Q.mean': 0,
-            'Q1_obs_pi':0,
-            'lmbda':0,
-            'action(s)[0]': 0,
-            'action(s)[1]': 0,
-            'bc':0,
-            'actor_loss': 0
-            }
+                "BC_value_pi_action":0,
+                "grad_norm":0,
+                'lambda*Q.mean': 0,
+                'Q1_obs_pi':0,
+                'lmbda':0,
+                'action(s)[0]': 0,
+                'action(s)[1]': 0,
+                'bc':0,
+                'actor_loss': 0
+                }
   
 
 
@@ -328,6 +331,7 @@ class TD3(object):
         next_q1 = qf1_target(next_observation, goal_observation, next_actions)
         next_q2 = qf2_target(next_observation, goal_observation, next_actions)
         min_next_q = jnp.minimum(next_q1, next_q2)
+        #min_next_q = 0.5* (next_q1 + next_q2) # try this to avoid undderestimation
         y = reward + (1 - jnp.squeeze(done)) * gamma * min_next_q
 
         #  Loss
@@ -368,14 +372,14 @@ class TD3(object):
                                 goal_observation,
                                 action,
                                 ):
-
+        scale = jnp.array(actor.action_scale)
         # Actor loss
         def loss_actor_fn(actor):
             pi = actor(observations, goal_observation)
             Q = qf1(observations, goal_observation, pi)
-            bc = jnp.square(pi - action).mean()
+            bc = jnp.square((pi - action)/scale).mean()
      
-            loss = -(alpha * Q.mean() - bc)
+            loss = -(Q.mean() - alpha * bc)
             return loss
         
         loss_actor, grads_actor = eqx.filter_value_and_grad(loss_actor_fn)(actor)
@@ -404,7 +408,7 @@ class TD3(object):
 
         # wandb_log
         pi = actor(observations, goal_observation)
-        bc = jnp.square(pi - action).mean()
+        bc =alpha * jnp.square((pi - action)/scale).mean()
         Q1_obs_pi =  qf1(observations, goal_observation, pi).mean() 
         grad_norm = jnp.sqrt(sum(jnp.sum(jnp.square(g)) for g in jax.tree_util.tree_leaves(grads_actor)))
         wandb_log_A = {
@@ -472,9 +476,12 @@ class TD3(object):
 
 
 
-def main():
+def main(done_threshold, name, alpha):
     args = tyro.cli(Args)
     args.env_id = 'sim_navigation'
+    args.done_threshold = done_threshold
+    args.env_id = name
+    args.alpha =alpha
     E1 = 0
     E2 = 0
     E3 = 0
@@ -483,6 +490,7 @@ def main():
     # 1. run wandb if required
     if args.track:
         import wandb
+        wandb.finish()
         wandb.init(
             project=args.wandb_project_name,
             entity=args.wandb_entiti,
@@ -496,21 +504,29 @@ def main():
     key,RL_key = jax.random.split(key, 2)
 
     # 3. prepare ReplayBuffer
-    ReplayBuffer = sample_flat_buffer()
+    ReplayBuffer = sample_item_buffer('Navigation_Mujoco_dataset_S1.h5')
+    ReplayBuffer.done_threshold = args.done_threshold
     args.env_params = ReplayBuffer.env_params
 
     # 4. prepare network    
     td3 = TD3(args, RL_key)
-   # td3.load_model()
+    td3.load_model()
 
     # 5. prepare evaluation env
-    eval_env = evaluation()
+    eval_env = Navigation_sim_environment()
+    eval_env.prepare_evaluation_state()
+
+    expert_obs, expert_next_obs, expert_goal_state, expert_actions, expert_terminals = ReplayBuffer.prepare_expert_evaluation()
+    expert_reward, expert_done, _ = ReplayBuffer.calculate_reward(expert_obs, expert_next_obs, expert_goal_state, expert_terminals)
+    expert_gamma = jnp.array([0.99**(i+1) for i in range(len(expert_done))])
+   # eval_env.done_threshold = args.done_threshold
 
     # 6. training loop
     total_offline_steps = args.total_offline_steps
     
     for step in range(total_offline_steps):
-        observation, goal_observation, action, next_observation, reward, done, _ = ReplayBuffer.sample1()
+        td3.args = args
+        observation, goal_observation, action, next_observation, reward, done, log_reward = ReplayBuffer.sample1()
         action = action
         reward = reward
         done = done
@@ -530,73 +546,117 @@ def main():
                     'action(s)[0]': td3.wandb_log_A['action(s)[0]'],
                     'action(s)[1]':td3.wandb_log_A['action(s)[1]'],
                     'bc':td3.wandb_log_A['bc'],
-                    'E1': E1,
-                    'E2': E2,
-                    'E3': E3,
+                    'Metrics 1:E_expert(Q(s_expert,a,s_g) -(r+ r(Q(s,pi(s),s_g))))': E1,
+                    'Metrics 2: E(Q(s_expert, pi(s), s_g)) ': E2,
+                    'done_treshold': args.done_threshold,
+                    'batch_reward': log_reward,
                     
             })
         
         # Calculate 2 metrics for detecing possible overfitting
-        if (step+1) % 1000 == 0:
-            observation = ReplayBuffer.expert1['state']
-            next_observation = ReplayBuffer.expert1['next_state']
-            goal_state = ReplayBuffer.expert1['goal_state']
-            action = ReplayBuffer.expert1['action']
+        if (step) % 100 == 0:
+            observation = expert_obs
+            next_observation = expert_next_obs
+            goal_state = expert_goal_state
+            action = expert_actions
+            index = jnp.where(expert_done==1)[0][0]
 
             Metric1 = 0
             Metric2 = 0
             E1 = 0
             E2 = 0
+
+
+
+
             obs_size = args.env_params['observation_size']
-            for ei in range(observation.shape[0]-1):
-                
-                Q_i = td3.qf1(observation[ei].reshape([1, obs_size]), goal_state[ei].reshape([1, obs_size]), action[ei].reshape([1,2]))
-                p_ii = td3.actor(observation[ei+1].reshape([1, obs_size]), goal_state[ei].reshape([1, obs_size])).reshape([1,2])
-                Q_ii = td3.qf1(observation[ei+1].reshape([1, obs_size]), goal_state[ei].reshape([1, obs_size]), p_ii)
-                ri, _ = ReplayBuffer.calculate_reward(observation[ei+1][:], goal_state[ei].reshape([1, obs_size]), action[ei].reshape([1,2]))
-                Metric1 = Q_i - (ri + args.gamma*Q_ii)
-                Metric2 = Q_ii
-                Q_ii_3 =  td3.qf1(observation[ei+1].reshape([1, obs_size]), goal_state[ei].reshape([1, obs_size]), action[ei+1].reshape([1,2]))
-                M3 = Q_i - (ri + args.gamma*Q_ii_3)
-                E1 += Metric1
-                E2 += Metric2
-                E3 += M3
-            E1 = E1 / (observation.shape[0]-1)
-            E2 = E2 / (observation.shape[0]-1)
-            E3 = E3 / (observation.shape[0]-1)
+            Q_i = td3.qf1(observation[0:index+1], goal_state=goal_state[0:index+1], action=expert_actions[0:index+1])
+            p_ii = td3.actor(next_observation[0:index+1], goal_state[0:index+1])
+            Q_ii = td3.qf1(next_observation[0:index+1], goal_state=goal_state[0:index+1], action=p_ii)
+            Metric1 = Q_i - (expert_reward[0:index+1] + (1-expert_done[0:index+1])*expert_gamma[0:index+1]*Q_ii)
+            
+            E1 = Metric1.mean()
+            Metric2 = Q_ii*(1-expert_done[0:index+1])
+            E2 = Metric2.mean()
 
 
 
 
+      #  if (step+1) % 500 ==0:
+            #args.alpha = args.alpha*0.99
 
 
 
         if (step+2) % 10000 == 0:
             td3.save_model()
 
-        if (step+1) % 2000 ==0:
+
+        if (step) % 1000 == 0:
+            eval_actions = td3.actor(eval_env.eval_features, eval_env.eval_goal_features)
+            actor_action_vector_image = eval_env.draw_action_vector(eval_env.eval_positions, eval_actions)
+
+
+            eval_all_Q = []
+            for ai in eval_env.eval_action_space:
+
+                ais =  jnp.broadcast_to(ai, eval_actions.shape)
+                eval_q = td3.qf1(eval_env.eval_features, eval_env.eval_goal_features, ais)
+                eval_all_Q.append(eval_q)
+            eval_Q = jnp.asarray(eval_all_Q)
+            Q_vector_image = eval_env.draw_Qvalue_vector(eval_env.eval_positions,eval_Q)
+
+
+
+            if args.track:    
+                wandb.log({
+                        'actor_action_vector_image': wandb.Image(actor_action_vector_image),
+                        'Q_vector_image': wandb.Image(Q_vector_image)
+                    })
+            
+
+
+
+        if (step) % 1000 == 0:
             obs_size = args.env_params['observation_size']
             avg_reward = 0
-            n_test = 2
+            n_test = 1
             for ci in range(n_test):
                 observation, position, quaternion = ReplayBuffer.sampleforeval()
                 goal_obs=observation[100,:]
+       
+
                 goal_pos=position[100,:]
+                goal_quat=quaternion[100,:]
+          
                 intial_pos = np.array([0,0])
                 intial_quet = np.array([1,0,0,0])
                 goal_obs = goal_obs.reshape([1,obs_size])
                 key, sample_key = jax.random.split(key, 2)
-                obs, done= eval_env.reset(goal_obs, goal_pos, initial_pos=intial_pos, intial_quat=intial_quet)
+                eval_env.reset(initial_pos=intial_pos, initial_quat=intial_quet)
+                image, obs, ternimal, next_pos, next_quat = eval_env.step([0,0])
                 t = 0
+                done = ternimal
                 Return = 0
-                while (not done) and (t < 508):
+
+                while (not done) and (t < 300):
+               
                     obs = obs.reshape([1,obs_size])
                     act = td3.actor(obs, goal_obs)
              
-                    obs, reward, done  = eval_env.step(act)
-                    Return += reward * 0.99 ** t
+                    next_image, next_obs, ternimal = eval_env.eval_controller(act)
+                    reward, done, mean_reward= ReplayBuffer.calculate_reward(state=obs.reshape(obs_size),next_state=next_obs.reshape(obs_size),goal_state=goal_obs.reshape(obs_size), ternimal = ternimal)
+                    #print('reward:',reward)
+                    obs = next_obs
+
+                    if reward > 0.9 or (t > 100) or ternimal:
+                        done = True
+                        print('final reward:',reward)
+                    Return += reward * (0.99 ** t)
                     if done:
-                        img = eval_env.evaluation_tracjectory()
+                        img = eval_env.evaluation_tracjectory(goal_pos=goal_pos, goal_quat=goal_quat, final_reward=reward)
+                        #plt.imshow(img)
+                        #plt.show()
+
                     t += 1
                 
                 avg_reward += Return
@@ -604,11 +664,11 @@ def main():
             avg_reward /= n_test
             print(f'steps: {step}, avg_reward: {avg_reward}')
             
-         
-            wandb.log({
-                    'Average_Return': avg_reward,
-                    'visualization': wandb.Image(img)
-                })
+            if args.track:
+                wandb.log({
+                        'Average_Return': avg_reward,
+                        'visualization': wandb.Image(img)
+                    })
             
 
 
@@ -618,7 +678,8 @@ def main():
 
 if __name__ == "__main__":
    
-    main()
+
+    main(done_threshold=0.8, alpha=0.1,name = 'take Q_min & new dataset $ reward depends on the change of Cosine Similarity')
 
 
         
