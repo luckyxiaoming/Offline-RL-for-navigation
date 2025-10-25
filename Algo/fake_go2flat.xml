@@ -1,0 +1,277 @@
+<mujoco model="indoor">
+    <compiler angle="radian" coordinate="local" inertiafromgeom="true"/>
+    <option timestep="0.1" iterations="4" />
+
+
+    <default>
+        <joint armature="0" damping="1"/>
+         <geom contype="0" conaffinity="0" condim="3" density="5.0" friction="1 0.5 0.5"/>
+
+         <default class="borderpost">
+            <geom type="box" size="9.9 0.2 2" material="matmarble"/>
+        </default>
+        <default class="roof">
+            <geom type="box" size="10 10 0.2" rgba=".3 .55 .55 0.4"/>
+        </default>
+        <default class="object1">
+            <geom type="capsule" material="object1" size="0.5 0.2"/>
+        </default>
+        <default class="object2">
+            <geom type="ellipsoid" material="object2" size="0.5 0.3 0.7"/>
+        </default>
+        <default class="object3">
+            <geom type="box" material="object3" size="0.2 0.2 0.2"/>
+        </default>
+
+        <default class="object4">
+            <geom type="cylinder" material="object4" size="0.5 0.5" condim="4" friction="1 .01 .01"/>
+        </default>
+
+        <default class="object5">
+            <geom type="sphere" material="object5" size="0.5"/>
+        </default>
+
+        <default class="object6">
+            <geom type="capsule" material="object1" size="0.05 0.02"/>
+        </default>
+        <default class="object7">
+            <geom type="ellipsoid" material="object2" size="0.05 0.03 0.07"/>
+        </default>
+        <default class="object8">
+            <geom type="box" material="object3" size="0.05 0.03 0.05"/>
+        </default>
+
+        <default class="object9">
+            <geom type="cylinder" material="object4" size="0.07 0.05" condim="4" friction="1 .01 .01"/>
+        </default>
+
+        <default class="object10">
+            <geom type="sphere" material="object5" size="0.05"/>
+        </default>
+
+
+
+    </default>
+
+    <asset>
+        <texture name="texgeom" type="cube" builtin="flat" mark="cross" width="128" height="128"
+            rgb1="0.6 0.6 0.6" rgb2="0.6 0.6 0.6" markrgb="1 1 1"/>
+        <texture name="texmarble" type="cube" file="marble.png"/>
+        <material name="matmarble" texture="texmarble" rgba=".7 .7 .7 1"/>
+        <texture builtin="gradient" height="100" rgb1="1 1 1" rgb2="0 0 0" type="skybox" width="100"/>
+        <texture builtin="flat" height="1278" mark="cross" markrgb="1 1 1" name="texgeom1" random="0.01" rgb1="0.8 0.6 0.4" rgb2="0.8 0.6 0.4" type="cube" width="127"/>
+        <texture builtin="checker" height="100" name="texplane" rgb1="0.6 0.6 0.6" rgb2="0.4 0.4 0.4" type="2d" width="100"/>
+        <material name="MatPlane" reflectance="0" shininess="0.2" specular="0.5" texrepeat="40 40" texture="texplane"/>
+        <material name="geom" texture="texgeom" texuniform="true"/>
+        <material name='object1' texture="texgeom" texuniform="true" rgba=".4 .9 .6 1" />
+        <material name='object2' texture="texgeom" texuniform="true" rgba=".4 .6 .9 1" />
+        <material name='object3' texture="texgeom" texuniform="true" rgba=".4 .9 .9 1" />
+        <material name='object4' texture="texgeom" texuniform="true" rgba=".8 .6 .8 1" />
+        <material name='object5' texture="texgeom" texuniform="true" rgba=".9 .1 .1 1" />
+
+
+      </asset>
+
+    <worldbody>
+        
+
+        <!--geom class="roof" pos="0 0 4" euler="0 0 0"/-->
+        <geom class="borderpost" pos="0 10 2" euler="0 0 0" rgba=".6 .5 .4 1"/>
+        <geom class="borderpost" pos="0 -10 2" euler="0 0 0" rgba=".6 .5 .4 1"/>
+        <geom class="borderpost" pos="10 0 2" euler="0 0 1.5708" rgba=".5 .4 .7 1"/>
+        <geom class="borderpost" pos="-10 0 2" euler="0 0 1.5708" rgba=".5 .4 .7 1"/>
+
+
+      
+  
+
+
+        <light cutoff="80" diffuse="1 1 1" dir="-0 0 -1.3" directional="true" exponent="5" pos="0 1 1.3" specular=".1 .1 .1"/>
+        <light pos="5 0 5" diffuse="1 1 1" specular="1 1 1" intensity="50"/>
+        <geom conaffinity="1" condim="3" material="MatPlane" name="floor" pos="0 0 0" size="10 10 10" type="plane" rgba="0.5 0.5 0.5 1.0"/>
+        <body name="fake_go2" pos="0 0 0.3" mocap="true">
+            <geom name="fake_go2_geom" pos="0 0 0" size="0.01 0.01 0.3" type="box" rgba=".8 .7 .3 1"/>
+            <body>
+                <joint/>
+                <camera name="came" mode="fixed" resolution="256 256" euler="2.1 -1.3 0.5" orthographic="false" fovy="30"/>
+                <geom name="body_came" pos="0 0 1.5" size="0.1 0.1 0.1" type="box"/>
+            </body>
+        </body>
+
+
+
+
+<geom type="capsule" size="0.30 0.85" pos="-8 9.5 1.08" rgba="0.11 0.71 0.36 1" euler="1.50 3.03 0.23"/>
+<geom type="box" size="0.67 0.32 0.51" pos="-6 9.5 1.02" rgba="0.27 0.02 0.98 1" euler="0.13 2.85 0.84"/>
+<geom type="sphere" size="0.67" pos="-4 9.5 0.90" rgba="0.85 0.28 0.02 1" euler="0.04 0.80 1.96"/>
+<geom type="capsule" size="0.34 0.61" pos="-2 9.5 0.53" rgba="0.52 0.76 0.38 1" euler="1.80 1.60 0.04"/>
+<geom type="box" size="0.46 0.63 0.69" pos="0 9.5 0.41" rgba="0.98 0.65 0.91 1" euler="0.79 1.58 0.57"/>
+<geom type="cylinder" size="0.29 0.74" pos="2 9.5 1.26" rgba="0.87 0.60 0.09 1" euler="1.07 1.17 1.25"/>
+<geom type="cylinder" size="0.47 0.64" pos="4 9.5 1.33" rgba="0.02 0.53 0.77 1" euler="0.67 0.56 1.74"/>
+<geom type="cylinder" size="0.32 0.53" pos="6 9.5 0.54" rgba="0.56 0.42 0.34 1" euler="0.77 0.76 1.33"/>
+<geom type="sphere" size="0.68" pos="8 9.5 0.91" rgba="0.62 0.93 0.11 1" euler="2.34 1.00 1.49"/>
+<geom type="capsule" size="0.35 0.82" pos="-9 9.5 1.08" rgba="0.42 0.84 0.88 1" euler="2.09 2.34 0.06"/>
+<geom type="ellipsoid" size="0.66 0.66 0.48" pos="9 9.5 1.02" rgba="0.48 0.57 0.77 1" euler="2.95 2.90 0.94"/>
+<geom type="cylinder" size="0.30 0.78" pos="-7 9.5 0.42" rgba="0.65 0.29 0.93 1" euler="0.11 2.66 2.92"/>
+<geom type="box" size="0.39 0.69 0.41" pos="-8 -9.5 0.67" rgba="0.65 0.49 0.64 1" euler="0.62 1.35 2.43"/>
+<geom type="box" size="0.41 0.67 0.60" pos="-6 -9.5 0.73" rgba="0.54 0.06 0.51 1" euler="0.83 0.73 1.34"/>
+<geom type="sphere" size="0.56" pos="-4 -9.5 0.51" rgba="0.52 0.19 0.59 1" euler="1.39 1.29 2.50"/>
+<geom type="sphere" size="0.31" pos="-2 -9.5 0.40" rgba="0.76 0.22 0.30 1" euler="2.00 3.00 1.06"/>
+<geom type="ellipsoid" size="0.55 0.42 0.55" pos="0 -9.5 1.42" rgba="0.67 0.69 0.94 1" euler="1.82 1.83 0.21"/>
+<geom type="ellipsoid" size="0.57 0.49 0.64" pos="2 -9.5 1.07" rgba="0.72 0.49 0.29 1" euler="0.14 0.06 0.27"/>
+<geom type="ellipsoid" size="0.66 0.54 0.34" pos="4 -9.5 0.51" rgba="0.33 0.01 0.11 1" euler="1.81 1.75 2.96"/>
+<geom type="ellipsoid" size="0.59 0.53 0.67" pos="6 -9.5 1.37" rgba="0.98 0.75 0.82 1" euler="0.67 1.76 1.56"/>
+<geom type="cylinder" size="0.22 0.69" pos="8 -9.5 0.92" rgba="0.09 0.55 0.13 1" euler="1.78 1.92 2.96"/>
+<geom type="box" size="0.41 0.53 0.30" pos="-9 -9.5 1.17" rgba="0.45 0.20 0.46 1" euler="0.50 2.80 1.27"/>
+<geom type="sphere" size="0.37" pos="9 -9.5 0.97" rgba="0.37 0.89 0.40 1" euler="2.30 1.61 1.83"/>
+<geom type="box" size="0.36 0.32 0.51" pos="-7 -9.5 1.34" rgba="0.98 0.76 1.00 1" euler="2.07 1.11 0.79"/>
+<geom type="capsule" size="0.30 0.94" pos="9.5 -8 1.49" rgba="0.52 0.13 0.66 1" euler="1.05 1.62 2.21"/>
+<geom type="cylinder" size="0.26 0.61" pos="9.5 -6 1.45" rgba="0.94 0.36 0.46 1" euler="0.77 2.60 1.54"/>
+<geom type="capsule" size="0.45 0.98" pos="9.5 -4 1.40" rgba="0.05 0.35 0.39 1" euler="2.55 1.03 1.52"/>
+<geom type="cylinder" size="0.35 0.99" pos="9.5 -2 0.93" rgba="0.06 0.32 0.64 1" euler="2.79 2.33 1.42"/>
+<geom type="cylinder" size="0.23 0.81" pos="9.5 0 0.44" rgba="0.16 0.83 0.91 1" euler="1.23 3.10 2.53"/>
+<geom type="sphere" size="0.36" pos="9.5 2 0.42" rgba="0.01 0.18 0.04 1" euler="0.55 0.59 0.72"/>
+<geom type="sphere" size="0.60" pos="9.5 4 1.33" rgba="0.54 0.02 0.67 1" euler="3.02 1.01 0.10"/>
+<geom type="cylinder" size="0.38 0.58" pos="9.5 6 1.16" rgba="0.91 0.72 0.33 1" euler="1.97 1.40 2.64"/>
+<geom type="cylinder" size="0.38 0.61" pos="9.5 8 0.98" rgba="0.06 0.50 0.83 1" euler="0.51 2.69 2.16"/>
+<geom type="sphere" size="0.36" pos="9.5 -9 0.91" rgba="0.65 0.02 0.68 1" euler="1.69 1.53 2.44"/>
+<geom type="box" size="0.61 0.51 0.66" pos="9.5 9 0.64" rgba="0.41 0.96 0.69 1" euler="1.42 1.29 0.25"/>
+<geom type="ellipsoid" size="0.41 0.44 0.49" pos="9.5 -7 1.47" rgba="0.55 0.55 0.26 1" euler="2.34 2.46 0.35"/>
+<geom type="capsule" size="0.47 0.74" pos="-9.5 -8 0.82" rgba="0.58 0.92 0.23 1" euler="0.76 3.04 1.45"/>
+<geom type="ellipsoid" size="0.55 0.55 0.45" pos="-9.5 -6 0.73" rgba="0.51 0.22 0.66 1" euler="2.84 0.12 2.26"/>
+<geom type="sphere" size="0.53" pos="-9.5 -4 0.74" rgba="0.82 0.23 0.87 1" euler="0.72 2.71 0.34"/>
+<geom type="cylinder" size="0.31 0.96" pos="-9.5 -2 0.89" rgba="0.86 0.90 0.04 1" euler="2.12 2.77 1.79"/>
+<geom type="sphere" size="0.38" pos="-9.5 0 1.31" rgba="0.50 0.85 0.55 1" euler="1.99 3.12 0.69"/>
+<geom type="capsule" size="0.29 0.98" pos="-9.5 2 1.01" rgba="0.88 0.47 0.56 1" euler="0.09 2.78 2.86"/>
+<geom type="box" size="0.33 0.60 0.32" pos="-9.5 4 0.84" rgba="0.57 0.75 0.08 1" euler="0.91 2.89 2.38"/>
+<geom type="box" size="0.57 0.41 0.61" pos="-9.5 6 0.82" rgba="0.46 0.49 0.69 1" euler="2.48 1.28 1.38"/>
+<geom type="sphere" size="0.44" pos="-9.5 8 1.35" rgba="0.05 0.76 0.20 1" euler="1.80 1.00 0.32"/>
+<geom type="sphere" size="0.42" pos="-9.5 -9 0.87" rgba="0.56 0.12 0.63 1" euler="2.79 1.36 1.79"/>
+<geom type="ellipsoid" size="0.58 0.58 0.57" pos="-9.5 9 1.11" rgba="0.53 0.42 0.46 1" euler="0.00 1.95 1.04"/>
+<geom type="cylinder" size="0.42 0.63" pos="-9.5 -7 1.15" rgba="0.59 0.45 0.91 1" euler="0.90 0.10 0.12"/>
+
+
+
+<geom type="box"       size="0.07 0.12 0.09" pos="-8.42  3.11 0.09" rgba="0.74 0.21 0.61 1" euler="2.61 0.54 1.32"/>
+<geom type="sphere"    size="0.08"         pos="-6.01 -7.95 0.08" rgba="0.22 0.90 0.11 1" euler="0.31 1.17 2.86"/>
+<geom type="cylinder"  size="0.06 0.15"    pos="-4.50  8.98 0.12" rgba="0.88 0.20 0.10 1" euler="2.01 0.78 0.44"/>
+<geom type="capsule"   size="0.09 0.17"    pos="-2.34 -1.76 0.09" rgba="0.30 0.67 0.40 1" euler="1.83 2.92 0.59"/>
+<geom type="ellipsoid" size="0.10 0.06 0.08" pos="-0.12  2.44 0.08" rgba="0.95 0.62 0.87 1" euler="0.72 1.89 0.34"/>
+<geom type="box"       size="0.06 0.07 0.05" pos=" 2.79 -3.22 0.05" rgba="0.81 0.53 0.09 1" euler="1.05 2.12 2.01"/>
+<geom type="sphere"    size="0.09"         pos=" 4.21  4.99 0.09" rgba="0.12 0.53 0.88 1" euler="0.66 2.87 1.12"/>
+<geom type="cylinder"  size="0.05 0.13"    pos=" 6.44 -8.77 0.13" rgba="0.38 0.24 0.17 1" euler="2.44 1.01 0.92"/>
+<geom type="capsule"   size="0.08 0.09"    pos=" 8.03  1.18 0.08" rgba="0.63 0.94 0.18 1" euler="0.23 0.41 2.39"/>
+<geom type="ellipsoid" size="0.09 0.09 0.05" pos="-9.10  7.65 0.09" rgba="0.40 0.79 0.91 1" euler="1.94 0.29 0.03"/>
+
+<geom type="box"       size="0.05 0.06 0.07" pos=" 9.28 -2.31 0.07" rgba="0.48 0.27 0.63 1" euler="2.06 1.42 0.71"/>
+<geom type="sphere"    size="0.06"         pos="-7.49 -4.55 0.06" rgba="0.63 0.41 0.60 1" euler="0.58 2.73 1.53"/>
+<geom type="cylinder"  size="0.07 0.12"    pos="-5.85  5.03 0.12" rgba="0.90 0.47 0.18 1" euler="1.41 0.86 2.90"/>
+<geom type="capsule"   size="0.05 0.09"    pos="-3.16 -6.92 0.09" rgba="0.77 0.20 0.50 1" euler="0.10 2.41 1.95"/>
+<geom type="ellipsoid" size="0.06 0.05 0.06" pos="-1.02  6.31 0.06" rgba="0.18 0.69 0.29 1" euler="2.45 1.18 0.80"/>
+<geom type="box"       size="0.07 0.04 0.05" pos=" 1.56 -0.88 0.05" rgba="0.97 0.52 0.91 1" euler="0.39 1.50 2.55"/>
+<geom type="sphere"    size="0.05"         pos=" 3.91  9.02 0.05" rgba="0.27 0.92 0.20 1" euler="1.98 0.40 0.12"/>
+<geom type="cylinder"  size="0.06 0.10"    pos=" 5.48 -1.43 0.10" rgba="0.85 0.62 0.03 1" euler="0.87 2.04 1.21"/>
+<geom type="capsule"   size="0.04 0.08"    pos=" 7.06  3.34 0.08" rgba="0.11 0.65 0.82 1" euler="2.81 2.16 0.52"/>
+<geom type="ellipsoid" size="0.05 0.09 0.07" pos="-8.73 -9.01 0.07" rgba="0.33 0.47 0.78 1" euler="1.17 0.77 2.20"/>
+
+<geom type="box"       size="0.08 0.06 0.05" pos="-6.44  8.09 0.05" rgba="0.60 0.42 0.52 1" euler="0.95 2.63 0.30"/>
+<geom type="sphere"    size="0.07"         pos="-4.02 -2.11 0.07" rgba="0.93 0.31 0.55 1" euler="2.30 1.98 0.71"/>
+<geom type="cylinder"  size="0.05 0.09"    pos="-2.22  0.66 0.09" rgba="0.48 0.16 0.96 1" euler="1.39 0.20 2.61"/>
+<geom type="capsule"   size="0.06 0.10"    pos=" 0.45 -3.74 0.10" rgba="0.19 0.90 0.34 1" euler="2.68 0.94 1.04"/>
+<geom type="ellipsoid" size="0.08 0.05 0.06" pos=" 2.10  1.72 0.06" rgba="0.99 0.67 0.82 1" euler="1.58 2.99 0.26"/>
+<geom type="box"       size="0.04 0.05 0.04" pos=" 4.67 -5.54 0.04" rgba="0.21 0.34 0.09 1" euler="0.26 1.03 1.77"/>
+<geom type="sphere"    size="0.05"         pos=" 6.09  6.47 0.05" rgba="0.76 0.18 0.37 1" euler="2.12 1.41 2.51"/>
+<geom type="cylinder"  size="0.06 0.11"    pos=" 8.55 -7.21 0.11" rgba="0.10 0.58 0.42 1" euler="0.49 2.34 0.98"/>
+<geom type="capsule"   size="0.07 0.08"    pos="-9.47  4.36 0.07" rgba="0.57 0.84 0.23 1" euler="2.22 1.06 2.47"/>
+<geom type="ellipsoid" size="0.06 0.07 0.05" pos=" 9.42 -9.11 0.06" rgba="0.16 0.44 0.89 1" euler="0.08 1.69 2.01"/>
+
+<geom type="box"       size="0.05 0.07 0.06" pos="-7.98 -0.57 0.06" rgba="0.68 0.58 0.61 1" euler="1.13 0.44 2.86"/>
+<geom type="sphere"    size="0.06"         pos="-5.66  2.89 0.06" rgba="0.43 0.24 0.87 1" euler="0.44 2.09 1.09"/>
+<geom type="cylinder"  size="0.05 0.07"    pos="-3.81 -8.32 0.07" rgba="0.86 0.76 0.28 1" euler="2.97 1.78 0.61"/>
+<geom type="capsule"   size="0.04 0.06"    pos="-1.53  7.14 0.06" rgba="0.07 0.94 0.66 1" euler="1.62 0.33 2.17"/>
+<geom type="ellipsoid" size="0.07 0.06 0.08" pos=" 0.81 -1.98 0.08" rgba="0.95 0.39 0.12 1" euler="0.36 1.50 1.95"/>
+<geom type="box"       size="0.06 0.08 0.05" pos=" 3.20  3.88 0.05" rgba="0.25 0.56 0.98 1" euler="2.05 0.12 0.49"/>
+<geom type="sphere"    size="0.05"         pos=" 5.62 -4.02 0.05" rgba="0.66 0.72 0.15 1" euler="1.09 2.71 0.88"/>
+<geom type="cylinder"  size="0.04 0.06"    pos=" 7.29  8.13 0.06" rgba="0.30 0.09 0.67 1" euler="2.41 0.75 1.31"/>
+<geom type="capsule"   size="0.09 0.11"    pos="-9.06 -6.18 0.11" rgba="0.18 0.51 0.36 1" euler="0.99 2.28 0.14"/>
+<geom type="ellipsoid" size="0.05 0.05 0.05" pos=" 9.07  0.97 0.05" rgba="0.79 0.22 0.48 1" euler="1.23 2.58 2.84"/>
+
+<geom type="box"       size="0.08 0.05 0.06" pos="-6.89  5.69 0.06" rgba="0.41 0.60 0.35 1" euler="0.51 1.74 2.06"/>
+<geom type="sphere"    size="0.07"         pos="-4.47 -3.33 0.07" rgba="0.58 0.90 0.74 1" euler="2.67 1.12 0.19"/>
+<geom type="cylinder"  size="0.06 0.08"    pos="-2.08  9.01 0.08" rgba="0.12 0.69 0.95 1" euler="1.70 2.98 0.52"/>
+<geom type="capsule"   size="0.05 0.06"    pos=" 0.56 -6.43 0.06" rgba="0.99 0.05 0.67 1" euler="0.17 1.99 2.46"/>
+<geom type="ellipsoid" size="0.04 0.08 0.07" pos=" 2.95  6.58 0.07" rgba="0.34 0.81 0.44 1" euler="2.23 0.61 1.10"/>
+<geom type="box"       size="0.07 0.05 0.06" pos=" 5.11 -0.04 0.06" rgba="0.14 0.38 0.82 1" euler="0.78 2.29 1.40"/>
+<geom type="sphere"    size="0.06"         pos=" 7.68  2.47 0.06" rgba="0.47 0.14 0.23 1" euler="1.46 0.58 2.35"/>
+<geom type="cylinder"  size="0.05 0.09"    pos=" 9.33 -5.77 0.09" rgba="0.88 0.73 0.49 1" euler="2.95 1.36 0.42"/>
+<geom type="capsule"   size="0.06 0.07"    pos="-8.12  1.05 0.06" rgba="0.24 0.49 0.67 1" euler="0.64 1.83 2.67"/>
+<geom type="ellipsoid" size="0.07 0.04 0.06" pos=" 8.88  7.12 0.06" rgba="0.55 0.34 0.95 1" euler="1.08 0.92 0.29"/>
+
+<geom type="box"       size="0.05 0.06 0.05" pos="-5.21 -9.47 0.05" rgba="0.69 0.20 0.31 1" euler="2.14 0.66 1.67"/>
+<geom type="sphere"    size="0.04"         pos="-3.74  4.17 0.04" rgba="0.99 0.79 0.09 1" euler="0.35 2.45 0.99"/>
+<geom type="cylinder"  size="0.03 0.07"    pos="-1.96 -0.55 0.07" rgba="0.29 0.88 0.56 1" euler="1.27 0.13 2.53"/>
+<geom type="capsule"   size="0.05 0.08"    pos=" 0.87  8.22 0.08" rgba="0.16 0.43 0.75 1" euler="2.37 1.49 1.19"/>
+<geom type="ellipsoid" size="0.06 0.07 0.04" pos=" 3.46 -2.69 0.06" rgba="0.36 0.15 0.99 1" euler="0.92 2.25 0.03"/>
+<geom type="box"       size="0.06 0.04 0.06" pos=" 5.94  5.50 0.06" rgba="0.81 0.10 0.58 1" euler="1.71 0.37 2.02"/>
+<geom type="sphere"    size="0.05"         pos=" 7.47 -3.95 0.05" rgba="0.45 0.66 0.20 1" euler="2.58 1.98 1.48"/>
+<geom type="cylinder"  size="0.04 0.06"    pos=" 9.11  0.44 0.06" rgba="0.07 0.29 0.97 1" euler="0.25 1.04 2.74"/>
+<geom type="capsule"   size="0.07 0.10"    pos="-9.41 -8.03 0.10" rgba="0.59 0.95 0.31 1" euler="1.61 2.40 0.61"/>
+<geom type="ellipsoid" size="0.05 0.06 0.08" pos=" 8.03 -1.86 0.08" rgba="0.26 0.52 0.43 1" euler="2.89 0.21 1.02"/>
+
+<geom type="box"       size="0.04 0.05 0.07" pos="-7.34  6.48 0.07" rgba="0.92 0.36 0.76 1" euler="0.46 2.02 0.99"/>
+<geom type="sphere"    size="0.06"         pos="-5.09 -5.12 0.06" rgba="0.12 0.57 0.82 1" euler="1.79 2.90 0.40"/>
+<geom type="cylinder"  size="0.05 0.08"    pos="-3.27  1.14 0.08" rgba="0.66 0.14 0.36 1" euler="2.04 1.32 2.13"/>
+<geom type="capsule"   size="0.08 0.12"    pos="-1.11 -7.81 0.12" rgba="0.39 0.71 0.25 1" euler="0.29 1.65 2.54"/>
+<geom type="ellipsoid" size="0.07 0.05 0.06" pos=" 1.22  9.31 0.06" rgba="0.83 0.28 0.14 1" euler="1.02 0.55 2.33"/>
+<geom type="box"       size="0.06 0.05 0.04" pos=" 3.63 -2.03 0.04" rgba="0.21 0.47 0.97 1" euler="2.58 1.10 0.45"/>
+<geom type="sphere"    size="0.05"         pos=" 6.02  0.79 0.05" rgba="0.74 0.02 0.67 1" euler="0.83 2.64 1.59"/>
+<geom type="cylinder"  size="0.06 0.09"    pos=" 8.49 -6.52 0.09" rgba="0.13 0.35 0.48 1" euler="1.48 0.96 2.08"/>
+<geom type="capsule"   size="0.05 0.06"    pos="-8.86  2.77 0.06" rgba="0.57 0.23 0.89 1" euler="2.33 2.75 0.18"/>
+<geom type="ellipsoid" size="0.04 0.06 0.05" pos=" 9.21  5.88 0.05" rgba="0.44 0.61 0.15 1" euler="0.69 1.48 2.47"/>
+
+<geom type="box"       size="0.07 0.06 0.05" pos="-6.12 -1.92 0.05" rgba="0.03 0.66 0.53 1" euler="1.33 0.09 2.19"/>
+<geom type="sphere"    size="0.08"         pos="-4.59  7.49 0.08" rgba="0.88 0.44 0.10 1" euler="2.53 1.57 0.95"/>
+<geom type="cylinder"  size="0.05 0.07"    pos="-2.74 -3.08 0.07" rgba="0.37 0.91 0.76 1" euler="0.47 2.23 1.98"/>
+<geom type="capsule"   size="0.06 0.05"    pos="-0.47  4.61 0.06" rgba="0.96 0.70 0.29 1" euler="2.88 1.20 0.08"/>
+<geom type="ellipsoid" size="0.05 0.08 0.07" pos=" 1.88 -8.44 0.07" rgba="0.55 0.09 0.33 1" euler="1.16 2.01 2.55"/>
+<geom type="box"       size="0.04 0.06 0.05" pos=" 4.37  2.26 0.05" rgba="0.79 0.99 0.69 1" euler="0.20 2.67 1.31"/>
+<geom type="sphere"    size="0.05"         pos=" 6.85 -0.96 0.05" rgba="0.20 0.31 0.83 1" euler="2.09 0.77 0.34"/>
+<geom type="cylinder"  size="0.06 0.06"    pos=" 8.98  3.66 0.06" rgba="0.89 0.55 0.37 1" euler="1.74 2.54 0.66"/>
+<geom type="capsule"   size="0.07 0.08"    pos="-9.22 -5.34 0.08" rgba="0.31 0.62 0.16 1" euler="0.12 1.09 2.01"/>
+<geom type="ellipsoid" size="0.06 0.05 0.04" pos=" 8.12  0.16 0.06" rgba="0.46 0.28 0.61 1" euler="2.70 1.33 1.70"/>
+
+<geom type="box"       size="0.05 0.05 0.06" pos="-7.03  9.47 0.06" rgba="0.70 0.38 0.09 1" euler="1.18 0.46 2.39"/>
+<geom type="sphere"    size="0.06"         pos="-5.40 -6.01 0.06" rgba="0.14 0.49 0.95 1" euler="2.88 1.84 0.27"/>
+<geom type="cylinder"  size="0.04 0.09"    pos="-3.60  0.09 0.09" rgba="0.57 0.12 0.44 1" euler="0.34 1.61 2.17"/>
+<geom type="capsule"   size="0.05 0.07"    pos="-1.28 -4.88 0.07" rgba="0.93 0.80 0.26 1" euler="2.53 0.36 1.73"/>
+<geom type="ellipsoid" size="0.08 0.06 0.05" pos=" 0.99  5.17 0.05" rgba="0.26 0.06 0.77 1" euler="1.48 2.95 0.45"/>
+<geom type="box"       size="0.06 0.04 0.05" pos=" 3.50 -1.21 0.05" rgba="0.62 0.24 0.82 1" euler="0.59 1.96 2.89"/>
+<geom type="sphere"    size="0.05"         pos=" 5.17  7.74 0.05" rgba="0.99 0.41 0.49 1" euler="0.93 2.22 1.12"/>
+<geom type="cylinder"  size="0.06 0.08"    pos=" 7.31 -2.55 0.08" rgba="0.08 0.44 0.35 1" euler="2.16 0.69 2.78"/>
+<geom type="capsule"   size="0.04 0.05"    pos=" 9.04  1.87 0.05" rgba="0.53 0.77 0.98 1" euler="1.29 2.02 0.96"/>
+<geom type="ellipsoid" size="0.07 0.07 0.06" pos="-8.57 -0.88 0.06" rgba="0.42 0.15 0.43 1" euler="0.03 1.25 2.49"/>
+
+<geom type="box"       size="0.05 0.07 0.04" pos="-6.25  4.11 0.04" rgba="0.16 0.64 0.72 1" euler="2.72 0.82 0.18"/>
+<geom type="sphere"    size="0.08"         pos="-4.83 -8.54 0.08" rgba="0.88 0.14 0.33 1" euler="1.05 2.36 1.62"/>
+<geom type="cylinder"  size="0.05 0.06"    pos="-2.99  2.57 0.06" rgba="0.73 0.33 0.60 1" euler="0.97 1.78 2.19"/>
+<geom type="capsule"   size="0.06 0.06"    pos="-0.61 -0.02 0.06" rgba="0.28 0.47 0.11 1" euler="1.94 2.54 0.39"/>
+<geom type="ellipsoid" size="0.05 0.08 0.06" pos=" 1.05  3.21 0.06" rgba="0.66 0.09 0.98 1" euler="2.11 0.48 1.37"/>
+<geom type="box"       size="0.06 0.06 0.07" pos=" 4.00 -6.77 0.07" rgba="0.35 0.88 0.19 1" euler="0.71 1.13 2.32"/>
+<geom type="sphere"    size="0.05"         pos=" 6.58  5.04 0.05" rgba="0.14 0.56 0.42 1" euler="2.40 0.33 0.89"/>
+<geom type="cylinder"  size="0.04 0.05"    pos=" 8.16 -9.22 0.05" rgba="0.84 0.07 0.68 1" euler="1.58 2.90 1.02"/>
+<geom type="capsule"   size="0.07 0.09"    pos="-9.09  6.04 0.09" rgba="0.05 0.38 0.95 1" euler="0.44 1.70 2.74"/>
+<geom type="ellipsoid" size="0.06 0.05 0.04" pos=" 9.12 -3.47 0.06" rgba="0.48 0.80 0.25 1" euler="2.02 0.05 1.55"/>
+
+
+
+        <body name="GodView" pos="0 0 15">
+            <camera name="godcame" mode="fixed" resolution="1080 1080" quat="1 0 0 0" fovy="70"/>
+        </body>
+
+
+
+    </worldbody>
+
+
+
+</mujoco>

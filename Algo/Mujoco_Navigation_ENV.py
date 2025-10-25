@@ -63,24 +63,50 @@ class Navigation_sim_environment():
 
 
   def select_action(self):
+    
+    # random select a binary value
+    relative_position = self.target_pos - self.current_pos[0:2]
+    relative_angle = self.target_angle - self.current_angle
+    if relative_angle > np.pi:
+        relative_angle = relative_angle - 2*np.pi
+    if relative_angle < -np.pi:
+        relative_angle = relative_angle + 2*np.pi
+    #print('relative position and angle:', relative_position, relative_angle)
 
-    # random select a bindary value
-    Flag = np.random.choice([0, 1])
-    if Flag == 0:
-        command_min = np.array([0.01, 0.01, 0])
-        command_max = np.array([0.1, 0.1, 0])
-        mean  = 0.5 * (command_max + command_min)
-        scale = 0.2 * (command_max - command_min)
-        command  =  np.random.normal(loc=mean, scale=scale, size=2)
-        command = np.clip(command, a_min=command_min, a_max=command_max)
-    else:
-        command_min = np.array([0.0, 0.0, -3.14])
-        command_max = np.array([0.0, 0.0, 3.14])
-        mean  = 0.5 * (command_max + command_min)
-        scale = 0.2 * (command_max - command_min)
-        command  =  np.random.normal(loc=mean, scale=scale, size=2)
-        command = np.clip(command, a_min=command_min, a_max=command_max)
-    return command
+    if np.abs(relative_position).sum() < 1.2:
+        self.target_pos = np.random.uniform(low=-5.5, high=5.5, size=2)
+        self.target_angle = np.random.uniform(low=-3.14, high=3.14, size=1).squeeze()
+        print('new target:', self.target_pos, self.target_angle)
+       
+    
+
+
+   
+
+    X =  np.random.uniform(low=-0.2, high=0.2)
+    Y =  np.random.uniform(low=-0.15, high=0.15)
+    R = np.random.uniform(low=-0.5, high=0.5)
+    gaussion_noise =  np.array([X, Y, R])
+    theta = np.concatenate((relative_position, np.array([relative_angle])), axis=0)
+    mu = np.array([0.01, 0.01, 0.01]) 
+    command = theta * mu  + gaussion_noise
+
+    command = np.clip(command, a_min=np.array([-0.3, -0.2, -0.5]), a_max=np.array([0.3, 0.2, 0.5])) 
+
+    position_command = command[0:2]
+    position_command_in_robot = self.Rz.T @ position_command
+    rotation_command = command[2]
+    rotation_command_in_robot = rotation_command 
+
+    action_copmmand = np.array([position_command_in_robot[0], position_command_in_robot[1], rotation_command_in_robot])
+
+
+
+
+
+
+  
+    return action_copmmand
        
 
   def update_desired_transition(self, desired_transition, transition, max_steps):
@@ -108,7 +134,11 @@ class Navigation_sim_environment():
      initial_pos = np.random.uniform(low=-5.5, high=5.5, size=2)
      initial_angle = np.random.uniform(low=-3.14, high=3.14, size=1).squeeze()
      initial_quat = np.array([np.cos((initial_angle)/2), 0, 0, np.sin((initial_angle)/2)])
+     print('initial position and angle:', initial_pos, initial_angle)
      self.reset(initial_pos=initial_pos, initial_quat=initial_quat)
+     self.target_pos = np.random.uniform(low=-5.5, high=5.5, size=2)
+     self.target_angle = np.random.uniform(low=-3.14, high=3.14, size=1).squeeze()
+     print('target position and angle:', self.target_pos, self.target_angle)
      while not full:
         
 
@@ -119,6 +149,7 @@ class Navigation_sim_environment():
            initial_pos = np.random.uniform(low=-5.5, high=5.5, size=2)
            initial_angle = np.random.uniform(low=-3.14, high=3.14, size=1).squeeze()
            initial_quat = np.array([np.cos((initial_angle)/2), 0, 0, np.sin((initial_angle)/2)])
+           print('collision, reset to:', initial_pos, initial_angle)
            self.reset(initial_pos=initial_pos, initial_quat=initial_quat)
         desired_transitions, full = self.update_desired_transition(desired_transitions, transitions, max_steps= self.frame_number)
 
@@ -183,15 +214,18 @@ class Navigation_sim_environment():
     self.done_list = []
     self.position_list = []
     self.quaterion_list = []
+    self.frame_list =  []
 
     mujoco.mj_resetData(self.mj_model, self.mj_data)
     current_pos = jnp.array(initial_pos).reshape([2])
     current_quat = initial_quat
+    self.current_pos = current_pos
+    self.current_angle = cal_z_from_quat(current_quat).squeeze()
     self.mj_data.mocap_pos = np.array([current_pos[0],current_pos[1], 0.3]).reshape([3])
     self.mj_data.mocap_quat = np.array([current_quat]).reshape([4])
     mujoco.mj_step(self.mj_model, self.mj_data)
     self.renderer.update_scene(self.mj_data, 'came')
-
+    self.update_Translation()
 
 
   def is_in_obstacle(self, point):
@@ -201,21 +235,30 @@ class Navigation_sim_environment():
     return False
 
 
+  def update_Translation(self):
+    rz = self.current_angle
+    self.Rz = np.array([[np.cos(rz), -np.sin(rz)],
+                   [np.sin(rz), np.cos(rz)]]).reshape([2,2])
+     
   
   def cal_command(self, action):
     '''transfer action to mujoco_position command'''
-    action = np.array(action).reshape([2])
+    action = np.array(action).reshape([3])
     current_pos = self.mj_data.mocap_pos.reshape([3])
     current_quat = self.mj_data.mocap_quat
     current_angle = cal_z_from_quat(current_quat)
-    distance = action[0]
-    add_angle = action[1]
-    next_angle = current_angle + add_angle
-    action = jnp.array([distance*jnp.cos(next_angle), distance*jnp.sin(next_angle)]).squeeze()
-    next_pos = np.array([current_pos[0] + action[0], current_pos[1] + action[1]])
-    new_angle = next_angle
+    self.update_Translation()
+    self.current_pos = current_pos
+    self.current_angle = current_angle
+    add_angle = action[2]
+
+    translation_action_in_world = self.Rz @ action[0:2].reshape([2,1])
+    rotation_action_in_world = add_angle 
+
+    next_pos = np.array([current_pos[0] + translation_action_in_world[0], current_pos[1] + translation_action_in_world[1]])
+    new_angle = current_angle + rotation_action_in_world
     next_quat = jnp.array([jnp.cos((new_angle)/2), 0, 0, jnp.sin((new_angle)/2)])
-    return next_pos, next_quat
+    return next_pos.reshape([2]), next_quat.reshape([4])
   
   def step(self, action):
     self.steps += 1
@@ -251,61 +294,42 @@ class Navigation_sim_environment():
     return image, feature, done, next_pos, next_quat
   
   def eval_controller(self, command):
-    self.current_command = np.array(command).reshape([2])
-    image, feature, done, next_pos, next_quat = self.step([0,0])
-    t = 0
-    flag = False
+    command = np.array(command).reshape([3])
+    if abs(command[0]) < 0.05:
+      command[0] = 0.05 * np.sign(command[0])
+    self.current_command = np.array(command).reshape([3])
+    image, feature, done, next_pos, next_quat = self.step([0,0,0])
+
+
    # plt.imshow(image)
 
    # plt.show()
 
+    self.image_list.append(image)
+    self.feature_list.append(feature)
+    self.position_list.append(next_pos)
+    self.quaterion_list.append(next_quat)
+    self.action_list.append(self.current_command.copy())
+    action = self.current_command.copy()
+    image, feature, done, next_pos, next_quat = self.step(action)
+    done = jnp.array(done).reshape([1])
+    self.next_image_list.append(image)
+    self.next_feature_list.append(feature)
+    self.done_list.append(done)
 
 
-    while (not abs(self.current_command[1]) < 1e-9 and not done) or t < self.sample_interal:
-        t = t + 1
-        self.image_list.append(image)
-        self.feature_list.append(feature)
-        self.position_list.append(next_pos)
-        self.quaterion_list.append(next_quat)
-        self.action_list.append(self.current_command.copy())
-    
-
-        action = np.array([0, 0], dtype="float32")
-        if self.current_command[1] >= self.action_max[1]:
-          action[1] = self.action_max[1]
-          self.current_command[1] = self.current_command[1] - action[1]
-        elif self.current_command[1] <= self.action_min[1]:
-          action[1] = self.action_min[1]
-          self.current_command[1] = self.current_command[1] - action[1]
-        else: 
-          action[1] = self.current_command[1]
-          self.current_command[1] = 0
-        action[0] = self.current_command[0]
-        action = np.clip(action, a_max=self.action_max, a_min=self.action_min)
-        image, feature, done, next_pos, next_quat = self.step_without_Dinov3(action)
-
-
-        if flag: done = True
-        if done: 
-          flag = True
-          break
-
-        
-
-   
-    image, feature, done, next_pos, next_quat = self.step([0,0])
-    next_image = image
-    next_feature = feature
-    ternimal = done
 
     
 
-    return next_image, next_feature, ternimal
+    return image, feature, done
     
   def controller(self, command):
-    self.current_command = np.array(command).reshape([2])
-    image, feature, done, next_pos, next_quat = self.step([0,0])
+    if abs(command[0]) < 0.05:
+        command[0] = 0.05 * np.sign(command[0])
 
+    self.current_command = np.array(command).reshape([3])
+    image, feature, done, next_pos, next_quat = self.step([0,0,0])
+    
     self.image_list = []
     self.feature_list = []
     self.next_image_list = []
@@ -317,44 +341,21 @@ class Navigation_sim_environment():
    # plt.imshow(image)
 
    # plt.show()
-    t = 0
-    flag = False
+
 
     sample_interal = self.sample_interal
-
-    while (not abs(self.current_command[1]) < 1e-9 and not done) or t < self.sample_interal :
-        t = t + 1
-        
-        self.image_list.append(image)
-        self.feature_list.append(feature)
-        self.position_list.append(next_pos)
-        self.quaterion_list.append(next_quat)
-        self.action_list.append(self.current_command.copy())
-    
-
-        action = np.array([0, 0], dtype="float32")
-        if self.current_command[1] >= self.action_max[1]:
-          action[1] = self.action_max[1]
-          self.current_command[1] = self.current_command[1] - action[1]
-        elif self.current_command[1] <= self.action_min[1]:
-          action[1] = self.action_min[1]
-          self.current_command[1] = self.current_command[1] - action[1]
-        else: 
-          action[1] = self.current_command[1]
-          self.current_command[1] = 0
-        action[0] = self.current_command[0]
-        action = np.clip(action, a_max=self.action_max, a_min=self.action_min)
-        image, feature, done, next_pos, next_quat = self.step(action)
-
-        if flag: done = True
-        if done: flag = True
-
-        self.next_image_list.append(image)
-        self.next_feature_list.append(feature)
-        self.done_list.append(done)
-
-
-
+    self.image_list.append(image)
+    self.frame_list.append(image)
+    self.feature_list.append(feature)
+    self.position_list.append(next_pos)
+    self.quaterion_list.append(next_quat)
+    self.action_list.append(self.current_command.copy())
+    action = self.current_command.copy()
+    image, feature, done, next_pos, next_quat = self.step(action)
+    done = jnp.array(done).reshape([1])
+    self.next_image_list.append(image)
+    self.next_feature_list.append(feature)
+    self.done_list.append(done)
     images = np.stack(self.image_list, axis=0)
     features = np.stack(self.feature_list, axis=0)
     actions = np.stack(self.action_list, axis=0)
@@ -366,21 +367,15 @@ class Navigation_sim_environment():
     next_images = np.stack(self.next_image_list, axis=0)
 
 
-
-
-
-    N =images.shape[0]
-    dones = dones.reshape([N, 1])
-
     transition = {
-    'images': images[0:N-sample_interal+1],
-    'features': features[0:N-sample_interal+1],
-    "actions": actions[0:N-sample_interal+1], 
-    "next_images": next_images[sample_interal-1:],
-    'next_features': next_features[sample_interal-1:],
-    'positions': positions[0:N-sample_interal+1],
-    'quaterions': quaterions[0:N-sample_interal+1],
-    "dones": dones[sample_interal-1:],
+    'images': images,
+    'features': features,
+    "actions": actions, 
+    "next_images": next_images,
+    'next_features': next_features,
+    'positions': positions,
+    'quaterions': quaterions,
+    "dones": dones,
       } 
     return transition
   
@@ -391,16 +386,20 @@ class Navigation_sim_environment():
     self.reset(initial_pos=[4,-3])
 
   
-    transitions = self.controller([0.03, 0.85])
+    transitions = self.controller([-0.1, 0.1, 0.5])
     desired_transitions, full = self.update_desired_transition(desired_transitions, transitions, max_steps= 1000)
-    transitions = self.controller([0.03, 0.85])
-    desired_transitions, full = self.update_desired_transition(desired_transitions, transitions, max_steps= 1000)
-    transitions = self.controller([0.03, 0.85])
+    transitions = self.controller([-0.1, 0.1, 0.5])
     desired_transitions, full = self.update_desired_transition(desired_transitions, transitions, max_steps= 1000)
 
+
     for i in range(20):
-      transitions = self.controller([0.1, 0])
+      transitions = self.controller([0.2, 0.0, 0])
       desired_transitions, full = self.update_desired_transition(desired_transitions, transitions, max_steps= 1000)
+
+    media.show_video(self.frame_list, fps=10)
+
+    media.write_video("indoorframetest222.mp4", self.frame_list, fps=10)
+
     
 
       
@@ -469,24 +468,51 @@ class Navigation_sim_environment():
 
     for i in coordinates:
        self.reset(initial_pos=i, initial_quat=initial_quat)
-       image, feature, done, next_pos, next_quat = self.step([0.0, 0.0])
+       image, feature, done, next_pos, next_quat = self.step([0.0, 0.0, 0.0])
        feature_list.append(feature)
-    self.goal_number = 138
+    self.goal_number = 136
     self.eval_features = np.stack(feature_list, axis=0)
     self.eval_goal_features =  jnp.broadcast_to(self.eval_features[self.goal_number], self.eval_features.shape)
     self.eval_positions = coordinates
 
 
-    action0 = jnp.array([0.05])
-    action1 = jnp.arange(-0.85, 0.85, 0.85/2.5)
+    action0 = jnp.array([0, 0])
+    action1 = jnp.arange(-0.55, 0.55, 0.55/2.5)
     X,Y = jnp.meshgrid(action0, action1)
     self.eval_action_space = jnp.vstack([X.ravel(), Y.ravel()]).T
 
 
   def draw_action_vector(self, positions, actions):
-    angles = self.eval_inital_angle + actions[:,1] 
-    u = actions[:,0] * jnp.cos(angles)*0.06
-    v = actions[:,0] * jnp.sin(angles)*0.06
+    # draw rotation direction
+    angles = self.eval_inital_angle + actions[:,2] 
+    u = jnp.cos(angles)*0.005
+    v =  jnp.sin(angles)*0.005
+    fig, ax = plt.subplots(figsize=(6,6), dpi=100)
+    ax.plot(self.eval_positions[self.goal_number,0], self.eval_positions[self.goal_number,1], marker='*', color='red', markersize=15, label='Goal')
+    plt.arrow( self.eval_positions[self.goal_number,0], self.eval_positions[self.goal_number,1],1.5, 0,shape='full', head_width=0.2, length_includes_head=True, color='red')
+
+    ax.quiver(positions[:, 0], positions[:, 1], u, v, scale=0.1, color='orange')
+
+    ax.axis('equal')
+    ax.legend()
+    fig.canvas.draw()
+    buf = np.frombuffer(fig.canvas.tostring_argb(), dtype=np.uint8)
+    canvas_width, canvas_height = fig.canvas.get_width_height()
+    buf = buf.reshape(canvas_width, canvas_height, 4)
+
+        # ARGB → RGB
+    img_rotation_vector = buf[:, :, 1:].copy()   #
+    plt.close(fig)
+    gc.collect()
+
+
+    # Draw translation direction 
+    action_in_robot = actions[:,0:2]
+    Rz = jnp.array([[jnp.cos(self.eval_inital_angle), -jnp.sin(self.eval_inital_angle)],
+                    [jnp.sin(self.eval_inital_angle), jnp.cos(self.eval_inital_angle)]])
+    actions_in_world = action_in_robot
+    u = np.sign(actions_in_world[:,0]) * np.exp(actions_in_world[:,0]) * 0.01
+    v =  np.sign(actions_in_world[:,1]) * np.exp(actions_in_world[:,1]) * 0.01
     fig, ax = plt.subplots(figsize=(6,6), dpi=100)
     ax.plot(self.eval_positions[self.goal_number,0], self.eval_positions[self.goal_number,1], marker='*', color='red', markersize=15, label='Goal')
     plt.arrow( self.eval_positions[self.goal_number,0], self.eval_positions[self.goal_number,1],1.5, 0,shape='full', head_width=0.2, length_includes_head=True, color='red')
@@ -501,11 +527,12 @@ class Navigation_sim_environment():
     buf = buf.reshape(canvas_width, canvas_height, 4)
 
         # ARGB → RGB
-    img_array = buf[:, :, 1:].copy()   #
+    img_translation_vector = buf[:, :, 1:].copy()   #
     plt.close(fig)
     gc.collect()
 
-    return img_array
+
+    return img_rotation_vector, img_translation_vector
 
   def draw_Qvalue_vector(self, positions, eval_Q):
     N = eval_Q.shape[0]
@@ -556,7 +583,7 @@ class Navigation_sim_environment():
 
 #test = Navigation_sim_environment()
 #test.create_expert_trajectory()
-#test.make_h5py_file(seeds=1, episode_size=1000, episode_num = 36)
+#test.make_h5py_file(seeds=1, episode_size=1000, episode_num = 20)
 
 
      

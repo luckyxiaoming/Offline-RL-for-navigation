@@ -142,7 +142,7 @@ def make_item_buffer(file_path):
     fake_timestep = {
         #'images': images,
         'feature': jnp.zeros(1024, dtype=jnp.float32),
-        "action": jnp.zeros(2, dtype=jnp.float32),
+        "action": jnp.zeros(3, dtype=jnp.float32),
         #"next_images": next_images,
         'next_feature':jnp.zeros(1024, dtype=jnp.float32),
         'position': jnp.zeros(2, dtype=jnp.float32),
@@ -162,6 +162,8 @@ def make_item_buffer(file_path):
     act1max = -1e9+1
     act2min = 1e9-1
     act2max = -1e9+1
+    act3min = 1e9-1
+    act3max = -1e9+1
 
     
     with h5py.File(file_path, "r") as f:
@@ -182,12 +184,14 @@ def make_item_buffer(file_path):
             act1max = max(actions[:, 0].max(), act1max)
             act2min = min(actions[:, 1].min(), act2min)
             act2max = max(actions[:, 1].max(), act2max)
+            act3min = min(actions[:, 2].min(), act3min)
+            act3max = max(actions[:, 2].max(), act3max)
 
             '''should check this carefully, ideal form is: [add_batch_size, [data_size]]'''
             #images_array = jnp.asarray(images, dtype=jnp.int8)[None, ...]
             feature_array = jnp.array(features).reshape(features.shape[0],1024).astype(jnp.float32)
             next_feature_array = jnp.array(next_features).reshape(next_features.shape[0],1024).astype(jnp.float32)
-            action_array = jnp.array(actions).reshape(features.shape[0],2).astype(jnp.float32)
+            action_array = jnp.array(actions).reshape(features.shape[0],3).astype(jnp.float32)
             position_array = jnp.asarray(positions, dtype=jnp.float32)[...]
             quaternions_array = jnp.asarray(quaternions, dtype=jnp.float32)[...]
             dones_array = jnp.asarray(dones, dtype=jnp.bool)[...]
@@ -218,9 +222,9 @@ def make_item_buffer(file_path):
 
 
     env_params = {
-      "action_space_low": jnp.array([act1min, act2min]),
-      "action_space_high": jnp.array([act1max, act2max]),
-      "action_dimension": 2,
+      "action_space_low": jnp.array([act1min, act2min, act3min]),
+      "action_space_high": jnp.array([act1max, act2max, act3max]),
+      "action_dimension": 3,
       "observation_size": 1024,
       "action_discrete": False
   }
@@ -254,7 +258,7 @@ def plot_dataset_coverage(file_path = 'Navigation_Mujoco_dataset_full2.h5'):
             
             position_array = jnp.asarray(positions, dtype=jnp.float32)[None, ...]
             dert_pos = np.abs(position_array[0,1:,:]- position_array[0,:-1, :]).sum(axis=-1)
-            index = np.where(dert_pos>1)[0]
+            index = np.where(dert_pos>0.5)[0]
             if np.size(index) >0:
                 start_idx = 0  
 

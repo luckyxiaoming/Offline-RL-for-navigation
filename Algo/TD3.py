@@ -15,7 +15,7 @@ import os
 import jax
 import numpy as np
 from brax import envs
-
+from PIL import Image
 import time
 import matplotlib.pyplot as plt # p
 from IPython.display import HTML, clear_output
@@ -49,7 +49,7 @@ class Args:
     # Algorithm specific arguments
     total_offline_steps: int = 1_000_000
     '''the discount factor gamma'''
-    gamma: float = 0.99
+    gamma: float = 0.95
     '''the target network update rate'''
     tau: float = 0.995
     '''the batch size of samples from the replay memory''' 
@@ -518,7 +518,7 @@ def main(done_threshold, name, alpha):
 
     expert_obs, expert_next_obs, expert_goal_state, expert_actions, expert_terminals = ReplayBuffer.prepare_expert_evaluation()
     expert_reward, expert_done, _ = ReplayBuffer.calculate_reward(expert_obs, expert_next_obs, expert_goal_state, expert_terminals)
-    expert_gamma = jnp.array([0.99**(i+1) for i in range(len(expert_done))])
+    expert_gamma = jnp.array([args.gamma**(i+1) for i in range(len(expert_done))])
    # eval_env.done_threshold = args.done_threshold
 
     # 6. training loop
@@ -593,24 +593,25 @@ def main(done_threshold, name, alpha):
 
         if (step) % 1000 == 0:
             eval_actions = td3.actor(eval_env.eval_features, eval_env.eval_goal_features)
-            actor_action_vector_image = eval_env.draw_action_vector(eval_env.eval_positions, eval_actions)
+            actor_translation_image, actor_rotation_image = eval_env.draw_action_vector(eval_env.eval_positions, eval_actions)
 
 
-            eval_all_Q = []
-            for ai in eval_env.eval_action_space:
+           # eval_all_Q = []
+            #for ai in eval_env.eval_action_space:
 
-                ais =  jnp.broadcast_to(ai, eval_actions.shape)
-                eval_q = td3.qf1(eval_env.eval_features, eval_env.eval_goal_features, ais)
-                eval_all_Q.append(eval_q)
-            eval_Q = jnp.asarray(eval_all_Q)
-            Q_vector_image = eval_env.draw_Qvalue_vector(eval_env.eval_positions,eval_Q)
+            #    ais =  jnp.broadcast_to(ai, eval_actions.shape)
+            #    eval_q = td3.qf1(eval_env.eval_features, eval_env.eval_goal_features, ais)
+            #    eval_all_Q.append(eval_q)
+            #eval_Q = jnp.asarray(eval_all_Q)
+           # Q_vector_image = eval_env.draw_Qvalue_vector(eval_env.eval_positions,eval_Q)
 
 
 
             if args.track:    
                 wandb.log({
-                        'actor_action_vector_image': wandb.Image(actor_action_vector_image),
-                        'Q_vector_image': wandb.Image(Q_vector_image)
+                        'actor_action_vector_image': wandb.Image(actor_translation_image),
+                        'actor_rotation_image': wandb.Image(actor_rotation_image),
+                      #  'Q_vector_image': wandb.Image(Q_vector_image)
                     })
             
 
@@ -619,24 +620,34 @@ def main(done_threshold, name, alpha):
         if (step) % 1000 == 0:
             obs_size = args.env_params['observation_size']
             avg_reward = 0
-            n_test = 1
+            n_test = 3
             for ci in range(n_test):
                 observation, position, quaternion = ReplayBuffer.sampleforeval()
-                goal_obs=observation[100,:]
+                goal_index = 11+ci
+                goal_obs=observation[goal_index,:]
        
 
-                goal_pos=position[100,:]
-                goal_quat=quaternion[100,:]
+                goal_pos=position[goal_index,:]
+                goal_quat=quaternion[goal_index,:]
           
                 intial_pos = np.array([0,0])
                 intial_quet = np.array([1,0,0,0])
                 goal_obs = goal_obs.reshape([1,obs_size])
                 key, sample_key = jax.random.split(key, 2)
+
+                
+                eval_env.reset(initial_pos=goal_pos, initial_quat=goal_quat)
+                goal_image, goal_obs, _, _, _ = eval_env.step([0,0,0])
+                goal_obs = goal_obs.reshape([1,obs_size])
+
                 eval_env.reset(initial_pos=intial_pos, initial_quat=intial_quet)
-                image, obs, ternimal, next_pos, next_quat = eval_env.step([0,0])
+                image, obs, ternimal, next_pos, next_quat = eval_env.step([0,0,0])
                 t = 0
                 done = ternimal
                 Return = 0
+
+                #image = Image.fromarray(goal_image)
+                #image.save(f'goal_image_for_trajector{ci}.png')
 
                 while (not done) and (t < 300):
                
@@ -646,16 +657,25 @@ def main(done_threshold, name, alpha):
                     next_image, next_obs, ternimal = eval_env.eval_controller(act)
                     reward, done, mean_reward= ReplayBuffer.calculate_reward(state=obs.reshape(obs_size),next_state=next_obs.reshape(obs_size),goal_state=goal_obs.reshape(obs_size), ternimal = ternimal)
                     #print('reward:',reward)
+                    #image = Image.fromarray(next_image)
+                    #image.save(f'{t:03d}for_trajectory{ci}.png')
+    
                     obs = next_obs
 
-                    if reward > 0.9 or (t > 100) or ternimal:
+                    if reward > 0.9 or (t > 200) or ternimal:
                         done = True
                         print('final reward:',reward)
-                    Return += reward * (0.99 ** t)
+                    Return += reward * (args.gamma ** t)
                     if done:
                         img = eval_env.evaluation_tracjectory(goal_pos=goal_pos, goal_quat=goal_quat, final_reward=reward)
                         #plt.imshow(img)
                         #plt.show()
+                        if args.track:
+                            wandb.log({
+                                    'visualization': wandb.Image(img),
+                                    'goal_image': wandb.Image(goal_image),
+                                    'final_image': wandb.Image(next_image),
+                                })
 
                     t += 1
                 
@@ -667,7 +687,7 @@ def main(done_threshold, name, alpha):
             if args.track:
                 wandb.log({
                         'Average_Return': avg_reward,
-                        'visualization': wandb.Image(img)
+                    
                     })
             
 
@@ -679,7 +699,7 @@ def main(done_threshold, name, alpha):
 if __name__ == "__main__":
    
 
-    main(done_threshold=0.8, alpha=0.1,name = 'take Q_min & new dataset $ reward depends on the change of Cosine Similarity')
+    main(done_threshold=0.85, alpha=0.1,name = 'take Q_min & new dataset $ reward depends on the change of Cosine Similarity')
 
 
         
