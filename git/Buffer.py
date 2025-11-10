@@ -120,8 +120,8 @@ class sample_item_buffer():
         self.obs_std = 1
         self.scale_reward = 1
         
-        self.done_threshold = 0.7
-        self.zero_threshold = -0.5
+        self.done_threshold = done_threshold
+
         
         self.buffer, self.buffer_state, self.env_params = make_item_buffer(file_path) 
 
@@ -140,54 +140,21 @@ class sample_item_buffer():
             epsoide_count = 0
             for key in keys:
                 grp = f[key]
-                raw = np.array(grp["actions"][:])
-                all_action = np.abs(np.array(grp["actions"][:]).sum(axis=-1))
-                mid_index = round(len(all_action)/2)
-                half1_action = all_action[0:mid_index]
-                half2_action = all_action[mid_index:] 
-                index1 = np.where(half1_action < 0.01)
-                index2 = np.where(half2_action < 0.01)
-                if len(index1[0]) == 0 and len(index2[0]) == 0:
-                    first = 0
-                    last = len(all_action)
-                elif len(index1[0]) != 0 and len(index2[0]) == 0:
-             
-                    first = index1[0][-1] + 1
-                    last = len(all_action)
-                
-                elif len(index1[0]) == 0 and len(index2[0]) != 0:
-                    first = 0
-                    last = index2[0][0] + mid_index
-                elif len(index1[0]) != 0 and len(index2[0]) != 0:
-                    first = index1[0][-1] + 1
-                    last = index2[0][0] + mid_index
-                
-   
-                
-       
-    
+                features = grp["features"][:][0:-1, :]
+                actions = grp["actions"][:][0:-1, :]
+                next_features = grp["features"][:][1:, :]
 
-                clipped_actions = grp["actions"][:][first:last, :]
-                clipped_features = grp["features"][:][first:last, :]
-
-                features = clipped_features[0:-1, :]
-                actions =clipped_actions [0:-1, :]
-                next_features = clipped_features[1:, :]
-
-
-
-                '''should check this carefully, ideal form is: [add_batch_size, [data_size]]'''
-            
                 feature_array = jnp.array(features).reshape(features.shape[0],1024).astype(jnp.float32)
                 next_feature_array = jnp.array(next_features).reshape(next_features.shape[0],1024).astype(jnp.float32)
                 action_array = jnp.array(actions).reshape(features.shape[0],3).astype(jnp.float32)
-            
-
+                goal = next_feature_array[-1]
+                goal_feature = jnp.broadcast_to(goal, feature_array.shape)
 
                 experiences = {
                     'feature':feature_array,
                     'next_feature': next_feature_array,
                     'action': action_array,
+                    'goal_feature': goal_feature
                     } 
                 EXPERT[epsoide_count] = experiences
                 epsoide_count += 1
@@ -212,32 +179,6 @@ class sample_item_buffer():
         pass
 
 
-    
-    def prepare_expert_evaluation(self):
-        file_path = "Navigation_Mujoco_dataset_expert_S1.h5"
-        with h5py.File(file_path, "r") as f:
-            keys = list(f.keys())
-            for key in keys:
-                grp = f[key]
-                actions = grp["actions"][:] 
-           
-                features = grp["features"][:]
-                next_features = grp["next_features"][:]
-                positions = grp["positions"][:]
-                terminals =  grp["dones"][:]
-  
-                features = features.reshape(features.shape[0],1024) 
-                '''should check this carefully, ideal form is: [add_batch_size, [data_size]]'''
-                goal = features[-1]
-                goal_states = jnp.broadcast_to(goal, features.shape)
-
-        return features, next_features, goal_states, actions, terminals
-              
-
-                
-
-                    
-
 
     def sample1(self):
         '''sample a batch of data from a flatbuffer'''
@@ -253,12 +194,12 @@ class sample_item_buffer():
 
         state = batch.experience['feature'] 
         action = batch.experience['action']
-        terminal = batch.experience['done']
+
         next_state = batch.experience['next_feature'] 
         batch2 = self.buffer.sample(self.buffer_state, keys[2])
         goal_state = batch2.experience['feature'] 
 
-        reward, done, log_reward = self.calculate_reward(state, next_state, goal_state, terminal)
+        reward, done, log_reward = self.calculate_reward(state, next_state, goal_state)
 
         return state, goal_state, action, next_state, reward, done, log_reward
 
@@ -314,7 +255,7 @@ class sample_item_buffer():
 
 
 
-    def calculate_reward(self, state, next_state, goal_state, ternimal):
+    def calculate_reward(self, state, next_state, goal_state):
         ''' calculate the reward and done signal
          the L2 range is about (-?, 0)
          the reward range is about (0, 1)
@@ -329,10 +270,10 @@ class sample_item_buffer():
 
         reward1 = jnp.exp((current_cos-1)*5)
         reward2 = jnp.exp((next_cos-1)*5)
-        reward3 = jnp.where(ternimal==1, -1, 0).reshape(reward1.shape)
+ 
 
        
-        reward = (reward2-reward1)*0.2 + reward3
+        reward = (reward2-reward1)*0.2 
 
         done_threshold = self.done_threshold
 
@@ -342,9 +283,7 @@ class sample_item_buffer():
   
 
         done = jnp.where(reward2>=done_threshold, 1, 0)
-        ternimal = jnp.array(ternimal).squeeze()
-        ternimal = ternimal.astype(jnp.int8)
-        done = done | ternimal
+
 
         reward = jnp.where(reward2>=done_threshold, 1, reward)
         mean_reward = reward.mean()
@@ -384,8 +323,8 @@ class sample_item_buffer():
 
 
 
-test = sample_item_buffer(file_path='/home/xiaoming/Research/Coding/offline_RL/realworlddata/S11_pink_raw_01.h5',
-                         expert_file_path='/home/xiaoming/Research/Coding/offline_RL/realworlddata/S11_expert_raw_02.h5')
+#test = sample_item_buffer(file_path='/home/xiaoming/Research/Coding/offline_RL/realworlddata/S11_4Hz_training_01.h5',
+#                        expert_file_path='/home/xiaoming/Research/Coding/offline_RL/realworlddata/S11_4Hz_expert_01.h5')
 
 
 #obs,next_obs,goal_obs, actions, terminals= test.prepare_expert_evaluation()

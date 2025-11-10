@@ -13,6 +13,7 @@ import gc
 from transformers import AutoImageProcessor, AutoModel
 from PIL import Image
 import torch
+import mediapy as media
 
 def prepare_Dinov3():
     device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -32,7 +33,7 @@ def cal_latent(obs, processor, model, device):
     return pooler_output.cpu().numpy()
 
 
-def rosbag_to_array(filepath, episode, SAVE_PATH):
+def rosbag_to_array(filepath, episode, SAVE_PATH, index1, index2):
     bagpath = Path(filepath)
     t1 = time.time()
     typestore = get_typestore(Stores.ROS2_FOXY)
@@ -72,8 +73,8 @@ def rosbag_to_array(filepath, episode, SAVE_PATH):
         SHOW_IMAGE = False
         START = False
         t1 = time.time()
+        T = 0
 
-   
 
         
         for connection, timestamp, rawdata in reader.messages():
@@ -89,6 +90,7 @@ def rosbag_to_array(filepath, episode, SAVE_PATH):
                 action = np.array([msg.linear.x, msg.linear.y, msg.angular.z])
                 action_buffer.append(action)
                 action_index_buffer.append(current_time_index)
+          
      
 
             if connection.topic == '/OFFRL/camera_state':
@@ -96,8 +98,12 @@ def rosbag_to_array(filepath, episode, SAVE_PATH):
                 height = msg.height
                 image = np.array(msg.data).reshape(height, width, -1)
                 features = cal_latent(image, processor, model, device)
+                #features = np.zeros((1, 1024))  # dummy features for testing
                 features_buffer.append(features.reshape(-1))
+                #features_buffer.append(image)
+
                 features_index_buffer.append(current_time_index)
+
                
                 # plot image
                 if SHOW_IMAGE:
@@ -130,15 +136,29 @@ def rosbag_to_array(filepath, episode, SAVE_PATH):
                     action_list.append(action_buffer.pop(0))
                     
             
-            if len(action_list)  >= 100 and len(features_list) >= 100:
+
+
+
+
+
+
+            if len(action_list) > 0 and len(features_list) > 0 and action_index_list[0] < index1[T]/4 and features_index_list[0] < index1[T]/4:
+                del action_index_list[0]
+                del features_index_list[0]
+                del action_list[0]
+                del features_list[0]
+
+
+            if len(action_list) > 0 and len(features_list) > 0 and action_index_list[-1] > index2[T]/4 and features_index_list[-1] > index2[T]/4:
                 print(f"the episode {episode} is saved with length:", len(action_list),'cost time:', time.time()-t1)
                 t1 = time.time()
-                action_array = np.array(action_list[0:100])
-                features_array = np.array(features_list[0:100])
-                del features_index_list[0:100]
-                del action_index_list[0:100]
-                del action_list[0:100]
-                del features_list[0:100]
+                min_number = min(len(action_list), len(features_list))
+                action_array = np.array(action_list[0:min_number])
+                features_array = np.array(features_list[0:min_number])
+                del features_index_list[0:min_number]
+                del action_index_list[0:min_number]
+                del action_list[0:min_number]
+                del features_list[0:min_number]
                 with h5py.File(SAVE_PATH, "a") as f:
 
 
@@ -146,9 +166,33 @@ def rosbag_to_array(filepath, episode, SAVE_PATH):
                     grp.create_dataset('features', data=features_array)
                     grp.create_dataset('actions', data=action_array)
                     episode += 1
+                    T += 1
 
 
-            
+            if False and len(action_list) > 0 and len(features_list) > 0 and action_index_list[-1] > index2[T]/4 and features_index_list[-1] > index2[T]/4:
+
+
+                media.write_video(
+                    'expert_video'+f'_ep{episode}.mp4', 
+                    features_list, 
+                    fps=4)
+                episode += 1
+                del features_list[:]
+                del action_list[:]
+                del action_index_list[:]
+                del features_index_list[:]
+                T += 1
+
+                
+
+
+        
+
+
+
+
+
+
 
         
         print("onethe length for left action:", len(action_list))
@@ -166,25 +210,19 @@ if __name__ == "__main__":
         1: "/home/data/landrobot_data/11-10(4hz)/expet_data/subset/",
     }
 
-
-    PATH = {
-        1: "/home/data/landrobot_data/11-10(4hz)/training data_01/subset/",
-        2: "/home/data/landrobot_data/11-10(4hz)/training data_02/subset/",
-        3: "/home/data/landrobot_data/11-10(4hz)/training data_03/subset/",
-        4: "/home/data/landrobot_data/11-10(4hz)/training data_04/subset/",
-    }
+    index1 = [1,47,80,134,180,226,252,295,362,415,462,530,571,605,664,723]
+    index2 = np.array([34,69,119,165,214,239,263,352,400,453,518,558,593,649,710,765]) + 2
 
 
 
-
-    SAVE_PATH = "S11_4Hz_training_01.h5"
+    SAVE_PATH = "S11_4Hz_expert_01.h5"
 
     for key in PATH.keys():
         bagpath = PATH[key]
 
         t1 = time.time()
 
-        action_array, features_array, episode = rosbag_to_array(bagpath, episode=episode, SAVE_PATH=SAVE_PATH)  
+        action_array, features_array, episode = rosbag_to_array(bagpath, episode=episode, SAVE_PATH=SAVE_PATH, index1=index1, index2=index2 )  
         gc.collect()
 
     

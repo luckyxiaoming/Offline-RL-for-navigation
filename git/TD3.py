@@ -39,11 +39,11 @@ class Args:
     
     # wandb
     '''if _True_, this experiment will be tracked on Wandb'''
-    track: bool = False
-    wandb_project_name: str = 'OfflineRL_Navigation_Mujoco12'
+    track: bool = True
+    wandb_project_name: str = 'OfflineRL_Navigation_S11'
     wandb_entiti: str = None
 
-    env_id: str = 'TD3_Navigation_Mujoco' 
+    env_id: str = 'TD3_Navigation_S11' 
 
     # Algorithm specific arguments
     total_offline_steps: int = 1_000_000
@@ -287,6 +287,7 @@ class TD3(object):
         action_bias =  (action_high + action_low)/2
         self.action_scale = action_scale
         if args.track:
+            self.loss_donenetwork = []
             self.wandb_log_A = {
 
                 "BC_value_pi_action":0,
@@ -362,7 +363,7 @@ class TD3(object):
         self.actor_optimizer_state = self.actor_optimizer.init(eqx.filter(self.actor, eqx.is_array))
         self.qf1_optimizer_state = self.qf1_optimizer.init(eqx.filter(self.qf1, eqx.is_array))
         self.qf2_optimizer_state = self.qf2_optimizer.init(eqx.filter(self.qf2, eqx.is_array))
-        self.done_optimizer_state = self.done_optimizer.init(eqx.filter(self.donenetwork, eqx.is_array))
+        self.done_optimizer_state = self.donenetwork_optimizer.init(eqx.filter(self.donenetwork, eqx.is_array))
 
     def save_model(self):
         eqx.tree_serialise_leaves("q1_model.eqx", self.qf1)
@@ -620,7 +621,7 @@ def main(done_threshold, name, alpha):
     args.alpha =alpha
     E1 = 0
     E2 = 0
-    E3 = 0
+
     run_name = f"{args.env_id}__{args.exp_name}__{args.seed}__{int(time.time())}"
 
     # 1. run wandb if required
@@ -640,7 +641,8 @@ def main(done_threshold, name, alpha):
     key,RL_key = jax.random.split(key, 2)
 
     # 3. prepare ReplayBuffer
-    ReplayBuffer = sample_item_buffer('Navigation_Mujoco_dataset_S2.h5')
+    ReplayBuffer = sample_item_buffer(file_path='/home/xiaoming/Research/Coding/offline_RL/realworlddata/S11_4Hz_training_01.h5',
+                         expert_file_path='/home/xiaoming/Research/Coding/offline_RL/realworlddata/S11_4Hz_expert_01.h5')
     ReplayBuffer.done_threshold = args.done_threshold
     args.env_params = ReplayBuffer.env_params
 
@@ -649,11 +651,6 @@ def main(done_threshold, name, alpha):
     #td3.load_model()
 
     # 5. prepare evaluation env
-
-    expert_obs, expert_next_obs, expert_goal_state, expert_actions, expert_terminals = ReplayBuffer.prepare_expert_evaluation()
-    expert_reward, expert_done, _ = ReplayBuffer.calculate_reward(expert_obs, expert_next_obs, expert_goal_state, expert_terminals)
-    expert_gamma = jnp.array([args.gamma**(i+1) for i in range(len(expert_done))])
-   # eval_env.done_threshold = args.done_threshold
 
     # 6. training loop
     total_offline_steps = args.total_offline_steps
@@ -689,30 +686,50 @@ def main(done_threshold, name, alpha):
             })
         
         # Calculate 2 metrics for detecing possible overfitting
-        if (step) % 100 == 0:
-            observation = expert_obs
-            next_observation = expert_next_obs
-            goal_state = expert_goal_state
-            action = expert_actions
-            index = jnp.where(expert_done==1)[0][0]
+        if (step) % 1000 == 0:
 
-            Metric1 = 0
-            Metric2 = 0
-            E1 = 0
-            E2 = 0
+            expert_number = 0
+            E1_list = []
+            E2_list = []
+            for i in ReplayBuffer.EXPERT:
+                expert = ReplayBuffer.EXPERT[i]
+                observation = expert['feature']
+                next_observation = expert['next_feature']
+                goal_state = expert['goal_feature']
+                action = expert['action']
+                expert_reward, expert_done, _ = ReplayBuffer.calculate_reward(observation, next_observation, goal_state)
+                expert_gamma = jnp.array([args.gamma**(i+1) for i in range(len(expert_done))])
 
+                index = jnp.where(expert_done==1)[0][0]
+                Metric1 = 0
+                Metric2 = 0
+                E1 = 0
+                E2 = 0
+                Q_i = td3.qf1(observation[0:index+1], goal_state=goal_state[0:index+1], action=action[0:index+1])
+                p_ii = td3.actor(next_observation[0:index+1], goal_state[0:index+1])
+                Q_ii = td3.qf1(next_observation[0:index+1], goal_state=goal_state[0:index+1], action=p_ii)
+                Metric1 = Q_i - (expert_reward[0:index+1] + (1-expert_done[0:index+1])*expert_gamma[0:index+1]*Q_ii)
+                
+                E1 = Metric1.mean()
+                Metric2 = Q_ii*(1-expert_done[0:index+1])
+                E2 = Metric2.mean()
+                E1_list.append(E1)
+                E2_list.append(E2)
+                str_number = str(expert_number)
+                expert_number +=1
+                if args.track:
+                    wandb.log({
+                        'Metrics 1 for'+str_number+':E_expert(Q(s_expert,a,s_g) -(r+ r(Q(s,pi(s),s_g))))': E1,
+                        'Metrics 2 for'+str_number+': E(Q(s_expert, pi(s), s_g)) ': E2,
+                    })
+            EE1 = jnp.array(E1_list).mean()
+            EE2 = jnp.array(E2_list).mean()
+            if args.track:
+                    wandb.log({
+                        'Metrics 1 for Expactation:E_expert(Q(s_expert,a,s_g) -(r+ r(Q(s,pi(s),s_g))))': EE1,
+                        'Metrics 2 for Expactation: E(Q(s_expert, pi(s), s_g)) ': EE2,
+                    })
 
-
-
-            obs_size = args.env_params['observation_size']
-            Q_i = td3.qf1(observation[0:index+1], goal_state=goal_state[0:index+1], action=expert_actions[0:index+1])
-            p_ii = td3.actor(next_observation[0:index+1], goal_state[0:index+1])
-            Q_ii = td3.qf1(next_observation[0:index+1], goal_state=goal_state[0:index+1], action=p_ii)
-            Metric1 = Q_i - (expert_reward[0:index+1] + (1-expert_done[0:index+1])*expert_gamma[0:index+1]*Q_ii)
-            
-            E1 = Metric1.mean()
-            Metric2 = Q_ii*(1-expert_done[0:index+1])
-            E2 = Metric2.mean()
 
 
 
@@ -743,7 +760,7 @@ def main(done_threshold, name, alpha):
 if __name__ == "__main__":
    
 
-    main(done_threshold=0.85, alpha=0.1,name = 'WHITENOISE_take Q_min & new dataset $ reward depends on the change of Cosine Similarity')
+    main(done_threshold=0.8, alpha=0.1,name = 'WHITENOISE_take Q_min & new dataset $ reward depends on the change of Cosine Similarity')
 
 
         
