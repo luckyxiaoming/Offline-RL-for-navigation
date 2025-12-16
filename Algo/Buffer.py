@@ -8,671 +8,348 @@ import gc
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 
+from Args import Args 
+
+@jax.jit
+def calculate_cosine_similarity(X, Y):
+    dot = jnp.sum(X*Y, axis=-1)
+    norm_x = jnp.linalg.norm(X, axis=-1)
+    norm_y = jnp.linalg.norm(Y, axis=-1)
+  
+    L2 = norm_x * norm_y + 1e-8
+    return dot / L2
+
+@jax.jit
+def calculate_reward_batch(current_sim, next_sim, done_threshold, scale=1.0, bonus=1.0):
+    #step_reward = scale * (next_sim - current_sim)
+    #is_current_done = current_sim >= done_threshold
+    is_next_done = next_sim >= done_threshold
+    is_success = is_next_done
+    #reward = step_reward
+    
+    # here we try sparse reward
+    bonus = jnp.where(is_success, 1, 0)
+    reward = bonus
+    
+    return reward, is_success
 
 
-def make_flat_buffer():
-    t1 = time.time()
+class DynamicHERBuffer:
+    def __init__(self, args: Args):
+        """
+        Initialization uses the Args dataclass.
+        """
+        self.args = args
+        self.batch_size = args.batch_size
+        self.done_threshold = args.done_threshold
+        self.key = jax.random.PRNGKey(args.seed)
+        self.gamma = args.gamma
+        
 
-    ################################################
-    ########     prepare Buffer      ###############
-    ################################################
+        # Temporary storage
+        self.features = []
+        self.next_features = []
+        self.actions = []
+        self.episode_info = [] 
+        self.S0 = []
+        self.Send = []
 
-    # First define hyper-parameters of the buffer.
-    max_length = 60000 # Maximum length of the buffer along the time axis. 
-    min_length = 2000 # Minimum length across the time axis before we can sample.
-    sample_batch_size = 256
-    add_sequences = True
-    add_batch_size = 1 
 
-    # Instantiate the trajectory buffer, which is a NamedTuple of pure functions.
-    buffer = fbx.make_flat_buffer(
-        max_length=max_length,
-        min_length=min_length,
-        sample_batch_size=sample_batch_size,
-        add_sequences = add_sequences,
-        add_batch_size=add_batch_size,
-        )
+        print("loading (Dynamic HER)...")
+        
+        current_idx = 0
+        # 1. Load Main Training Dataset
+        if hasattr(args, 'training_dataset_filepath') and args.training_dataset_filepath:
+            print(f"Loading Training File: {args.training_dataset_filepath}")
+            steps_1 = self._load_file(args.training_dataset_filepath, current_idx)
+            current_idx += steps_1
+        else:
+            print("Warning: No training dataset filepath provided in args.")
 
-    fake_timestep = {
-         #   'image': jnp.zeros([240,320,3], dtype=jnp.int8),
-            'feature': jnp.zeros(1024, dtype=jnp.float32),
-            'position': jnp.zeros(2, dtype=jnp.float32),
-            'quaternion': jnp.zeros(4, dtype=jnp.float32),
-            'action': jnp.zeros(2, dtype=jnp.float32)
+        # 2. Load Additional Expert Training Data (if exists)
+        if hasattr(args, 'add_expert_data_filepath') and args.add_expert_data_filepath:
+            print(f"Loading Additional Expert Training File: {args.add_expert_data_filepath}")
+            steps_2 = self._load_file(args.add_expert_data_filepath, current_idx)
+            current_idx += steps_2
+
+        # Transform to JAX Array
+        if len(self.features) > 0:
+            self.features = jnp.array(np.concatenate(self.features), dtype=jnp.float32)
+            self.next_features = jnp.array(np.concatenate(self.next_features), dtype=jnp.float32)
+            self.actions = jnp.array(np.concatenate(self.actions), dtype=jnp.float32)
+        else:
+            raise ValueError("No data loaded! Check file paths.")
+
+        # Process episode info
+        episode_starts = [info[0] for info in self.episode_info]
+        episode_lens = [info[1] for info in self.episode_info]
+        
+        self.episode_starts = jnp.array(episode_starts, dtype=jnp.int32)
+        self.episode_lens = jnp.array(episode_lens, dtype=jnp.int32)
+        self.episode_indices = jnp.arange(len(self.episode_info), dtype=jnp.int32)
+        self.total_steps = len(self.features)
+
+        print(f"Finish dataset load! Steps: {self.total_steps}, Trajectories: {len(self.episode_info)}")
+        
+        self.env_params = {
+            'action_space_low': self.actions.min(axis=0),
+            'action_space_high': self.actions.max(axis=0),
+            'action_dimension': self.actions.shape[-1],
+            'observation_size': self.features.shape[-1]
         }
-
-
-    buffer_state = buffer.init(fake_timestep)
-
-    ################################################
-    ######## Load data from h5 files ###############
-    ################################################
-
-    file_path = "Navigation_Mujoco_dataset_full2.h5"
-
- 
-
-    act1min = 1e9-1
-    act1max = -1e9+1
-    act2min = 1e9-1
-    act2max = -1e9+1
-
-    
-    with h5py.File(file_path, "r") as f:
-        keys = list(f.keys())
-        for key in keys:
-            grp = f[key]
-
-            # latents size (2000X, 1, 768), the first element shoule be abandoned
-            #images = grp["images"][1:]
-            features = grp["features"][1:]
-            actions = grp["actions"][1:]
-            positions = grp["positions"][1:]
-            quaternions = grp["quaternions"][1:]
-            act1min = min(actions[:, 0].min(), act1min)
-            act1max = max(actions[:, 0].max(), act1max)
-            act2min = min(actions[:, 1].min(), act2min)
-            act2max = max(actions[:, 1].max(), act2max)
-
-            '''should check this carefully, ideal form is: [add_batch_size, [data_size]]'''
-            #images_array = jnp.asarray(images, dtype=jnp.int8)[None, ...]
-            feature_array = jnp.array(features).reshape(1,features.shape[0],1024).astype(jnp.float32)
-            action_array = jnp.array(actions).reshape(1,features.shape[0],2).astype(jnp.float32)
-            position_array = jnp.asarray(positions, dtype=jnp.float32)[None, ...]
-            quaternions_array = jnp.asarray(quaternions, dtype=jnp.float32)[None, ...]
-
-
-
-            experiences = {
-                #'image': images_array,
-                'feature':feature_array,
-                'action': action_array,
-                'position': position_array,
-                'quaternion': quaternions_array,
-                } 
-            buffer_state = buffer.add(buffer_state, experiences)
-
-            gc.collect()
-
-
-
-
-
-
-
-
-
-
-
-    env_params = {
-      "action_space_low": jnp.array([act1min, act2min]),
-      "action_space_high": jnp.array([act1max, act2max]),
-      "action_dimension": 2,
-      "observation_size": 1024,
-      "action_discrete": False
-  }
-    print(f"The buffer is done! Cost time: {time.time() - t1} seconds")
-
-
-    return buffer, buffer_state, env_params
-
-
-
-def make_item_buffer(file_path):
-    t1 = time.time()
-
-    ################################################
-    ########     prepare Buffer      ###############
-    ################################################
-
-    # First define hyper-parameters of the buffer.
-    max_length = 36000 # Maximum length of the buffer along the time axis. 
-    min_length = 2000 # Minimum length across the time axis before we can sample.
-    sample_batch_size = 256
-    add_batches = True
-
-    # Instantiate the trajectory buffer, which is a NamedTuple of pure functions.
-    buffer = fbx.make_item_buffer(
-        max_length=max_length,
-        min_length=min_length,
-        sample_batch_size=sample_batch_size,
-        add_batches=add_batches,
-        )
-
-    fake_timestep = {
-        #'images': images,
-        'feature': jnp.zeros(1024, dtype=jnp.float32),
-        "action": jnp.zeros(3, dtype=jnp.float32),
-        #"next_images": next_images,
-        'next_feature':jnp.zeros(1024, dtype=jnp.float32),
-        'position': jnp.zeros(2, dtype=jnp.float32),
-        'quaternion': jnp.zeros(4, dtype=jnp.float32),
-        "done": jnp.zeros(1, dtype=jnp.bool)
-        } 
-
-
-    buffer_state = buffer.init(fake_timestep)
-
-    ################################################
-    ######## Load data from h5 files ###############
-    ################################################
-
-
-    act1min = 1e9-1
-    act1max = -1e9+1
-    act2min = 1e9-1
-    act2max = -1e9+1
-    act3min = 1e9-1
-    act3max = -1e9+1
-
-    
-    with h5py.File(file_path, "r") as f:
-        keys = list(f.keys())
-        for key in keys:
-            grp = f[key]
-
-            features = grp["features"][:]
-            actions = grp["actions"][:]
-            actions = jnp.where(actions>0.85, 0.85, actions)
-            actions = jnp.where(actions<-0.85, -0.85, actions)
-            positions = grp["positions"][:]
-            quaternions = grp["quaterions"][:]
-            next_features = grp["next_features"][:]
-            dones = grp["dones"][:]
-
-            act1min = min(actions[:, 0].min(), act1min)
-            act1max = max(actions[:, 0].max(), act1max)
-            act2min = min(actions[:, 1].min(), act2min)
-            act2max = max(actions[:, 1].max(), act2max)
-            act3min = min(actions[:, 2].min(), act3min)
-            act3max = max(actions[:, 2].max(), act3max)
-
-            '''should check this carefully, ideal form is: [add_batch_size, [data_size]]'''
-            #images_array = jnp.asarray(images, dtype=jnp.int8)[None, ...]
-            feature_array = jnp.array(features).reshape(features.shape[0],1024).astype(jnp.float32)
-            next_feature_array = jnp.array(next_features).reshape(next_features.shape[0],1024).astype(jnp.float32)
-            action_array = jnp.array(actions).reshape(features.shape[0],3).astype(jnp.float32)
-            position_array = jnp.asarray(positions, dtype=jnp.float32)[...]
-            quaternions_array = jnp.asarray(quaternions, dtype=jnp.float32)[...]
-            dones_array = jnp.asarray(dones, dtype=jnp.bool)[...]
-
-
-
-            experiences = {
-                #'image': images_array,
-                'feature':feature_array,
-                'next_feature': next_feature_array,
-                'action': action_array,
-                'position': position_array,
-                'quaternion': quaternions_array,
-                'done': dones_array,
-                } 
-            buffer_state = buffer.add(buffer_state, experiences)
-
-            gc.collect()
-
-
-
-
-
-
-
-
-
-
-
-    env_params = {
-      "action_space_low": jnp.array([act1min, act2min, act3min]),
-      "action_space_high": jnp.array([act1max, act2max, act3max]),
-      "action_dimension": 3,
-      "observation_size": 1024,
-      "action_discrete": False
-  }
-    print(f"The buffer is done! Cost time: {time.time() - t1} seconds")
-
-
-    return buffer, buffer_state, env_params
-
-
-
-def plot_dataset_coverage(file_path = 'Navigation_Mujoco_dataset_full2.h5'):
-    t1 = time.time()
-   # file_path = 'Navigation_Mujoco_dataset_full3.h5'
-    plt.figure(figsize=(8, 8))
-    with h5py.File(file_path, "r") as f:
-        keys = list(f.keys())
-        for key in keys[:]:
-            grp = f[key]
-
-            # latents size (2000X, 1, 768), the first element shoule be abandoned
-            #images = grp["images"][1:]
-            #features = grp["features"][1:]
-            actions = grp["actions"][1:]
-            positions = grp["positions"][1:]
-            dones = grp["dones"][1:]
-            #quaternions = grp["quaternions"][1:]
-
-
-            '''should check this carefully, ideal form is: [add_batch_size, [data_size]]'''
-         
+        
+        # Load Expert Dataset for Evaluation (if needed)
+        self.prepare_expert_dataset(args.expert_file_path)
+        self.prepare_goal_data(args.target_file_path)
+        gc.collect()
+
+    def _load_file(self, filepath, start_global_idx):
+        steps_added = 0
+        try:
+            with h5py.File(filepath, "r") as f:
+                keys = list(f.keys()) 
+                for key in keys:
+                    grp = f[key]
+
+                    raw_feats = grp["features"][:]
+                    # Simple Normalization
+                    norms = np.linalg.norm(raw_feats, axis=-1, keepdims=True)
+                    raw_feats = raw_feats / (norms + 1e-8)
+
+                    acts = grp["actions"][:]
+                    
+                    length = min(len(raw_feats)-1, len(acts))
+                    if length < 5: continue
+                    
+                    self.features.append(raw_feats[:length])
+                    self.next_features.append(raw_feats[1:length+1])
+                    self.actions.append(acts[:length])
+
+                    self.S0.append(raw_feats[0])
+                    self.Send.append(raw_feats[length-1])
+
+                    self.episode_info.append((start_global_idx, length))
+                    
+                    start_global_idx += length
+                    steps_added += length
+        except Exception as e:
+            print(f"Error loading {filepath}: {e}")
             
-            position_array = jnp.asarray(positions, dtype=jnp.float32)[None, ...]
-            dert_pos = np.abs(position_array[0,1:,:]- position_array[0,:-1, :]).sum(axis=-1)
-            index = np.where(dert_pos>0.5)[0]
-            if np.size(index) >0:
-                start_idx = 0  
-
-                for i in range(len(index)):
-                    end_idx = index[i] + 1 
-                    plt.plot(positions[start_idx:end_idx, 0], positions[start_idx:end_idx, 1], label=f"Segment {i+1}", color='blue')
-                    start_idx = end_idx 
-
-                plt.plot(positions[start_idx:, 0], positions[start_idx:, 1], label=f"Segment {len(index)+1}", color='blue')
-            else:
-                plt.plot(positions[:, 0], positions[:, 1], label="Exploration Path", color='blue')
-
-
-            gc.collect()
-        # plot obstacles
-
-    plt.show()
-
-    pass
-
-
-class sample_flat_buffer():
-    def __init__(self,done_threshold=0.7):
-        
-        self.sign_normal_obs = False
-        self.sign_normal_reward = False
-        self.obs_mean = 0 
-        self.obs_std = 1
-        self.scale_reward = 1
-        
-        self.done_threshold = 0.7
-        self.zero_threshold = -0.5
-        
-        self.buffer, self.buffer_state, self.env_params = make_flat_buffer() 
-        self.prepare_expert_evaluation()
-        self.key = jax.random.PRNGKey(3)
-
-    def update_dataset():
-        pass
+        return steps_added 
     
-    def prepare_expert_evaluation(self):
-        file_path = "Navigation_Mujoco_dataset_expert1.h5"
-        with h5py.File(file_path, "r") as f:
+    def _sample_basic_transitions(self, key, n_samples):
+
+        ep_idxs = jax.random.choice(key, self.episode_indices, shape=(n_samples,))
+        starts = self.episode_starts[ep_idxs]
+        lens = self.episode_lens[ep_idxs]
+        t_offsets = jax.random.randint(key, (n_samples,), 0, lens)
+        cur_idxs = starts + t_offsets
+        
+        s = self.features[cur_idxs]
+        a = self.actions[cur_idxs]
+        ns = self.next_features[cur_idxs]
+        return s, a, ns, starts, t_offsets, lens, cur_idxs
+
+    def _get_geometric_offsets(self, key, lens, t_offsets, p=0.05):
+        raw_offsets = jax.random.geometric(key, p, shape=lens.shape)
+        remaining_steps = lens - t_offsets - 1
+        valid_remaining = jnp.maximum(remaining_steps, 1)
+        return jnp.minimum(raw_offsets, valid_remaining)
+
+    def _sample_batch_internal(self, ratios):
+        r_cur, r_geom, r_uni, r_rand = ratios
+        
+        n_cur = int(self.batch_size * r_cur)
+        n_geom = int(self.batch_size * r_geom)
+        n_uni = int(self.batch_size * r_uni)
+        # Ensure sum matches batch_size perfectly
+        n_rand = self.batch_size - n_cur - n_geom - n_uni 
+        
+        keys = jax.random.split(self.key, 15)
+        self.key = keys[0]
+        
+        s_list, g_list, a_list, ns_list, m_list = [], [], [], [], []
+
+        # 1. Current State (p_cur): select current state as goal
+        if n_cur > 0:
+            s, a, ns, _, _, _, _ = self._sample_basic_transitions(keys[1], n_cur)
+            g = s 
+            m = jnp.ones(n_cur)
+            s_list.append(s); g_list.append(g); a_list.append(a); ns_list.append(ns); m_list.append(m)
+
+        # 2. Geometric Future (p_geom) goal from geometric distribution, 
+        # if gamma is closer to 1, sample farther future
+        # if gamma is closer to 0, sample nearer future
+        if n_geom > 0:
+            s, a, ns, starts, t, lens, _ = self._sample_basic_transitions(keys[2], n_geom)
+            offsets = self._get_geometric_offsets(keys[3], lens, t, p=(1-self.gamma))
+            g_idxs = starts + t + offsets
+            g = self.features[g_idxs]
+            m = jnp.ones(n_geom)
+            s_list.append(s); g_list.append(g); a_list.append(a); ns_list.append(ns); m_list.append(m)
+
+        # 3. Uniform Future (p_traj): 
+        if n_uni > 0:
+            s, a, ns, starts, t, lens, _ = self._sample_basic_transitions(keys[4], n_uni)
+            rnd_floats = jax.random.uniform(keys[5], (n_uni,))
+            offsets = ((lens - t - 1) * rnd_floats).astype(jnp.int32) + 1
+            g_idxs = starts + t + offsets
+            g = self.features[g_idxs]
+            m = jnp.ones(n_uni)
+            s_list.append(s); g_list.append(g); a_list.append(a); ns_list.append(ns); m_list.append(m)
+
+        # 4. Random Goal (p_rand)
+        if n_rand > 0:
+            s, a, ns, _, _, _, _ = self._sample_basic_transitions(keys[6], n_rand)
+            rnd_goal_idxs = jax.random.randint(keys[7], (n_rand,), 0, self.total_steps)
+            g = self.features[rnd_goal_idxs]
+            m = jnp.zeros(n_rand)
+            s_list.append(s); g_list.append(g); a_list.append(a); ns_list.append(ns); m_list.append(m)
+
+        # Concatenate
+        state = jnp.concatenate(s_list)
+        action = jnp.concatenate(a_list)
+        next_state = jnp.concatenate(ns_list)
+        goal_state = jnp.concatenate(g_list)
+        mask = jnp.concatenate(m_list)
+        
+        cur_sim = calculate_cosine_similarity(state, goal_state)
+        next_sim = calculate_cosine_similarity(next_state, goal_state)
+        
+
+        scale = self.args.reward_scale
+        bonus = self.args.bonus
+        
+        reward, done = calculate_reward_batch(cur_sim, next_sim, self.done_threshold, scale=scale, bonus=bonus)
+        done = done.astype(jnp.float32)
+
+        return state, goal_state, action, next_state, reward, done, mask
+
+    def sample_value_batch(self):
+        # Uses args.value_sample_ratios (e.g., 0.2, 0.5, 0.1, 0.2)
+        return self._sample_batch_internal(self.args.value_sample_ratios)
+    
+
+    def sample_policy_batch(self):
+        # Uses args.policy_sample_ratios (e.g., 0.0, 0.0, 1.0, 0.0)
+        return self._sample_batch_internal(self.args.policy_sample_ratios)
+    
+    def prepare_goal_data(self, target_file_path):
+        GOALS = {}
+        episode_count = 0
+        POS = {}
+        try:
+            with h5py.File(target_file_path, "r") as f:
+                for key in f.keys():
+                    re_key = f'Target_{episode_count}'
+                    grp = f[re_key]
+                    
+                    raw_feats = grp["features"][:]
+                    norms = np.linalg.norm(raw_feats, axis=-1, keepdims=True)
+                    norms_feats = raw_feats / (norms + 1e-8)
+                                            
+                    if "positions" in grp:
+                        position = grp["positions"][:]
+                    if "quaterions" in grp: 
+                        quaternion = grp["quaterions"][:]
+                    elif "quaternions" in grp:
+                        quaternion = grp["quaternions"][:]
+                    POS[episode_count] = position
+                    
+                    # JAX Conversion
+                    goal = {
+                        'goal_feature': jnp.array(norms_feats[0], dtype=jnp.float32),
+                        'goal_position': jnp.array(position[0], dtype=jnp.float32),
+                        'goal_quaternion': jnp.array(quaternion[0], dtype=jnp.float32),
+                    }
+
+                    GOALS[episode_count] = goal
+                    episode_count += 1
+        except Exception as e:
+            print(f"Error loading expert file {file_path}: {e}")
+
+        pos_array = np.array(list(POS.values()))
+        for T in POS:
+            cur_pos = pos_array[T]
+            cur_dist = jnp.linalg.norm(cur_pos - pos_array, axis=-1)
+            sorted_indices = int(np.argmax(cur_dist))
+            GOALS[T]['initial_position'] = GOALS[sorted_indices]['goal_position']
+            GOALS[T]['initial_quaternion'] = GOALS[sorted_indices]['goal_quaternion']
+            GOALS[T]['initial_distance'] = jnp.linalg.norm(GOALS[T]['initial_position'] - GOALS[T]['goal_position'])  
+            print(f"Goal {T}: Initial distance to goal is {GOALS[T]['initial_distance']:.4f}")          
+
+        print(f"GOAL DATA: {episode_count} goal have been loaded.")
+
+        self.GOALS = GOALS
+
+
+    def prepare_expert_dataset(self, expert_file_path):
+        # create a dictionary with 20 keys, each key contains expert data from one episode
+        EXPERT = {}
+        act1min = 1e9-1
+        act1max = -1e9+1
+        act2min = 1e9-1
+        act2max = -1e9+1
+        act3min = 1e9-1
+        act3max = -1e9+1
+
+
+        with h5py.File(expert_file_path, "r") as f:
             keys = list(f.keys())
+            epsoide_count = 0
             for key in keys:
                 grp = f[key]
-                n = 83
-                actions = grp["actions"][1:n] 
-           
-                features = grp["features"][1:n]
-                positions = grp["positions"][1:n]
-                quaternions = grp["quaternions"][1:n]
 
-                features = features.reshape(features.shape[0],1024) 
-                '''should check this carefully, ideal form is: [add_batch_size, [data_size]]'''
-                goal = features[-1]
-                goat_state = jnp.broadcast_to(goal, features[0:-1].shape)
-              
-                self.expert1= {
-                    'state' : jnp.array(features[0:-1]).astype(jnp.float32),
-                    'action' : jnp.array(actions[0:-1]).astype(jnp.float32),
-                    'next_state' : jnp.array(features[1:]).astype(jnp.float32),
-                    'positions':  jnp.array(positions[0:-1]).astype(jnp.float32),
-                    'quaternions':  jnp.array(quaternions[0:-1]).astype(jnp.float32),
-                    'goal_state': goat_state.astype(jnp.float32)
-                            }
+                raw_feats = grp["features"][:]
+                norms = np.linalg.norm(raw_feats, axis=-1, keepdims=True)
+                raw_feats = raw_feats / (norms + 1e-8)
+
+
+                features = raw_feats[0:-1, :]
+                actions = grp["actions"][:][0:-1, :]
+                next_features = raw_feats[1:, :]
+                positions = grp["positions"][:][0:-1, :]
+                quaternions = grp["quaterions"][:][0:-1, :]
+                act1min = min(actions[:, 0].min(), act1min)
+                act1max = max(actions[:, 0].max(), act1max)
+                act2min = min(actions[:, 1].min(), act2min)
+                act2max = max(actions[:, 1].max(), act2max)
+                act3min = min(actions[:, 2].min(), act3min)
+                act3max = max(actions[:, 2].max(), act3max)
                 
+
+                feature_array = jnp.array(features).reshape(features.shape[0],1024).astype(jnp.float32)
+                next_feature_array = jnp.array(next_features).reshape(next_features.shape[0],1024).astype(jnp.float32)
+                
+                action_array = jnp.array(actions).reshape(features.shape[0],3).astype(jnp.float32)
+                goal = next_feature_array[-1]
+                goal_feature = jnp.broadcast_to(goal, feature_array.shape)
+
                 experiences = {
-                
-                    'feature':jnp.array(features).reshape(1,features.shape[0],1024).astype(jnp.float32),
-                    'action': jnp.array(actions).reshape(1,features.shape[0],2).astype(jnp.float32),
-                    'position': jnp.array(positions).reshape(1,features.shape[0],2).astype(jnp.float32),
-                    'quaternion': jnp.array(quaternions).reshape(1,features.shape[0],4).astype(jnp.float32)
+                    'feature':feature_array,
+                    'next_feature': next_feature_array,
+                    'action': action_array,
+                    'goal_feature': goal_feature,
+                    'position': positions,
+                    'quaternion': quaternions,
+
                     } 
-                self.buffer_state = self.buffer.add(self.buffer_state, experiences)
-
-                    
-
-
-    def sample1(self):
-        '''sample a batch of data from a flatbuffer'''
-
-        keys = jax.random.split(self.key, 3)
-        self.key = keys[0]
-        batch = self.buffer.sample(self.buffer_state, keys[1])
-
-       
-
-        ###
-   
-
-        state = batch.experience.first['feature'] 
-        action = batch.experience.first['action']
-        position = batch.experience.first['position']
-        #quaternion = jnp.array([quaternion[1,random_index,:]])
-        next_state = batch.experience.second['feature'] 
-        #batch2 = self.buffer.sample(self.buffer_state, keys[2])
-        goal_state = self.check_goal_state(state)
-
-        reward, done, log_reward = self.calculate_reward(state, next_state, goal_state, action)
-
-        return state, goal_state, action, next_state, reward, done, log_reward
+                EXPERT[epsoide_count] = experiences
+                epsoide_count += 1
 
 
-    def sampleforeval(self):
-        '''only for evaluation'''
-
-        keys = jax.random.split(self.key, 3)
-        self.key = keys[0]
-        batch = self.buffer.sample(self.buffer_state, keys[1])
-        state = batch.experience.first['feature'] 
-        position = batch.experience.first['position']
-        quaternion = batch.experience.first['quaternion']
-        
-        return state, position, quaternion
+                gc.collect()
+            print(f"In expert dataset, action min:{act1min},{act2min},{act3min}, action max: {act1max},{act2max},{act3max},")
+        self.EXPERT = EXPERT
     
-    
-    def check_goal_state(self,  state):
-        keys = jax.random.split(self.key, 2)
-        self.key = keys[0]
-        batch1 = self.buffer.sample(self.buffer_state, keys[1])
-        goal_state = batch1.experience.first['feature'] 
-
-        
-
-        done_threshold = self.done_threshold
-        current_done = 1
-        t = 0
-        while jnp.sum(current_done)>0:
-            keys = jax.random.split(self.key, 2)
-            self.key = keys[0]
-            batch2 = self.buffer.sample(self.buffer_state, keys[1])
-            goal_state2 = batch2.experience.first['feature'] 
-            current_cos = self.calculate_cosine_similarity(state, goal_state)
-            reward1 = jnp.exp((current_cos-1)*30)
-
-            reward2 = jnp.repeat(reward1.reshape([256,1]), 1024, axis=1)
-            goal_state = jnp.where(reward2>=done_threshold, goal_state2, goal_state)
-
-            current_cos = self.calculate_cosine_similarity(state, goal_state)
-            reward1 = jnp.exp((current_cos-1)*30)
-            current_done = jnp.where(reward1>=done_threshold, 1, 0)
-            t += 1
-            if t > 5:
-                print('error!!!!!')
-                break
-
-   
-     
-        if current_done.sum()>0:
-            ttt= jnp.where(reward1>=done_threshold)
-         
-        return goal_state
 
 
-
-    def calculate_reward(self, state, next_state, goal_state, action):
-        ''' calculate the reward and done signal
-         the L2 range is about (-?, 0)
-         the reward range is about (0, 1)
-         if L2 < zero_threshold, reward1 = 0;
-         if L2 > done_threshold, reward = 1;
-         if L2
-         plese set _self.done_threshold_ to control when the episode is done'''
-        
-
-        current_cos = self.calculate_cosine_similarity(state, goal_state)
-        next_cos = self.calculate_cosine_similarity(next_state, goal_state)
-
-        reward1 = jnp.exp((current_cos-1)*30)
-        reward2 = jnp.exp((next_cos-1)*30)
-
-       
-        reward = reward2-reward1
-
-        done_threshold = self.done_threshold
-
-
-        current_done = jnp.where(reward1>=done_threshold, 1, 0)
-
-  
-
-        done = jnp.where(reward2>=done_threshold, 1, 0)
-
-        reward = jnp.where(reward2>=done_threshold, 1, reward)
-        mean_reward = reward.mean()
-        if current_done.sum() >= 1 and not len(current_done) == 1:
-            print(f'current state batch conclude current_done = {current_done.sum()}')
-    #    if done.sum() >= 1 and not len(done) == 1:
-    #        print(f'current batch conclude Done = {done.sum()}')
-        return reward, done, mean_reward
-
-    def calculate_cosine_similarity(self, X, Y):
+    @staticmethod
+    @jax.jit
+    def calculate_cosine_similarity(X, Y):
         dot = jnp.sum(X*Y, axis=-1)
-        L2 = jnp.linalg.norm(X, axis=-1) * jnp.linalg.norm(Y, axis=-1) + 1e-8
+        norm_x = jnp.linalg.norm(X, axis=-1)
+        norm_y = jnp.linalg.norm(Y, axis=-1)
+    
+        L2 = norm_x * norm_y + 1e-8
         return dot / L2
-
-
-
-       
-    
-    def normalize_observations(self):
-        if self.sign_normal_obs:
-            raise NameError("This function was already called!")
-        self.sign_normal_obs = True
-        index = self.buffer_state.current_index
-        obs_array = self.buffer_state.experience['observation']
-        current_array = obs_array[:, 0:index, :]
-        self.obs_mean = current_array.mean(axis = 1)
-        self.obs_std = current_array.std(axis = 1) + 1e-6
-        print(f'The observation in Dataset has been norimalized!')
-        return self.obs_mean, self.obs_std
-
-
-class sample_item_buffer():
-    def __init__(self, file_path, done_threshold=0.7):
-        
-        self.sign_normal_obs = False
-        self.sign_normal_reward = False
-        self.obs_mean = 0 
-        self.obs_std = 1
-        self.scale_reward = 1
-        
-        self.done_threshold = 0.7
-        self.zero_threshold = -0.5
-        
-        self.buffer, self.buffer_state, self.env_params = make_item_buffer(file_path) 
-        #self.prepare_expert_evaluation()
-        self.key = jax.random.PRNGKey(3)
-
-    def update_dataset():
-        pass
-    
-    def prepare_expert_evaluation(self):
-        file_path = "Navigation_Mujoco_dataset_expert_S1.h5"
-        with h5py.File(file_path, "r") as f:
-            keys = list(f.keys())
-            for key in keys:
-                grp = f[key]
-                actions = grp["actions"][:] 
-           
-                features = grp["features"][:]
-                next_features = grp["next_features"][:]
-                positions = grp["positions"][:]
-                terminals =  grp["dones"][:]
-  
-                features = features.reshape(features.shape[0],1024) 
-                '''should check this carefully, ideal form is: [add_batch_size, [data_size]]'''
-                goal = features[-1]
-                goal_states = jnp.broadcast_to(goal, features.shape)
-
-        return features, next_features, goal_states, actions, terminals
-              
-
-                
-
-                    
-
-
-    def sample1(self):
-        '''sample a batch of data from a flatbuffer'''
-
-        keys = jax.random.split(self.key, 4)
-        self.key = keys[0]
-        batch = self.buffer.sample(self.buffer_state, keys[1])
-
-       
-
-        ###
-   
-
-        state = batch.experience['feature'] 
-        action = batch.experience['action']
-        terminal = batch.experience['done']
-        next_state = batch.experience['next_feature'] 
-        batch2 = self.buffer.sample(self.buffer_state, keys[2])
-        goal_state = batch2.experience['feature'] 
-
-        reward, done, log_reward = self.calculate_reward(state, next_state, goal_state, terminal)
-
-        return state, goal_state, action, next_state, reward, done, log_reward
-
-
-    def sampleforeval(self):
-        '''only for evaluation'''
-        key = jax.random.PRNGKey(3)
-        batch = self.buffer.sample(self.buffer_state, key)
-        state = batch.experience['feature'] 
-        position = batch.experience['position']
-        quaternion = batch.experience['quaternion']
-        
-        return state, position, quaternion
-    
-    
-    def check_goal_state(self,  state):
-        keys = jax.random.split(self.key, 2)
-        self.key = keys[0]
-        batch1 = self.buffer.sample(self.buffer_state, keys[1])
-        goal_state = batch1.experience['feature'] 
-        
-
-        
-
-        done_threshold = self.done_threshold
-        current_done = 1
-        t = 0
-        while jnp.sum(current_done)>0:
-            keys = jax.random.split(self.key, 2)
-            self.key = keys[0]
-            batch2 = self.buffer.sample(self.buffer_state, keys[1])
-            goal_state2 = batch2.experience.first['feature'] 
-            current_cos = self.calculate_cosine_similarity(state, goal_state)
-            reward1 = jnp.exp((current_cos-1)*30)
-
-            reward2 = jnp.repeat(reward1.reshape([256,1]), 1024, axis=1)
-            goal_state = jnp.where(reward2>=done_threshold, goal_state2, goal_state)
-
-            current_cos = self.calculate_cosine_similarity(state, goal_state)
-            reward1 = jnp.exp((current_cos-1)*30)
-            current_done = jnp.where(reward1>=done_threshold, 1, 0)
-            t += 1
-            if t > 5:
-                print('error!!!!!')
-                break
-
-   
-     
-        if current_done.sum()>0:
-            ttt= jnp.where(reward1>=done_threshold)
-         
-        return goal_state
-
-
-
-    def calculate_reward(self, state, next_state, goal_state, ternimal):
-        ''' calculate the reward and done signal
-         the L2 range is about (-?, 0)
-         the reward range is about (0, 1)
-         if L2 < zero_threshold, reward1 = 0;
-         if L2 > done_threshold, reward = 1;
-         if L2
-         plese set _self.done_threshold_ to control when the episode is done'''
-        
-
-        current_cos = self.calculate_cosine_similarity(state, goal_state)
-        next_cos = self.calculate_cosine_similarity(next_state, goal_state)
-
-        reward1 = jnp.exp((current_cos-1)*5)
-        reward2 = jnp.exp((next_cos-1)*5)
-        reward3 = jnp.where(ternimal==1, -1, 0).reshape(reward1.shape)
-
-       
-        reward = (reward2-reward1)*0.2 + reward3
-
-        done_threshold = self.done_threshold
-
-
- 
-
-  
-
-        done = jnp.where(reward2>=done_threshold, 1, 0)
-        ternimal = jnp.array(ternimal).squeeze()
-        ternimal = ternimal.astype(jnp.int8)
-        done = done | ternimal
-
-        reward = jnp.where(reward2>=done_threshold, 1, reward)
-        mean_reward = reward.mean()
-    #    if done.sum() >= 1 and not len(done) == 1:
-    #        print(f'current batch conclude Done = {done.sum()}')
-        return reward, done, mean_reward
-
-    def calculate_cosine_similarity(self, X, Y):
-        dot = jnp.sum(X*Y, axis=-1)
-        L2 = jnp.linalg.norm(X, axis=-1) * jnp.linalg.norm(Y, axis=-1) + 1e-8
-        return dot / L2
-
-
-
-       
-    
-    def normalize_observations(self):
-        if self.sign_normal_obs:
-            raise NameError("This function was already called!")
-        self.sign_normal_obs = True
-        index = self.buffer_state.current_index
-        obs_array = self.buffer_state.experience['observation']
-        current_array = obs_array[:, 0:index, :]
-        self.obs_mean = current_array.mean(axis = 1)
-        self.obs_std = current_array.std(axis = 1) + 1e-6
-        print(f'The observation in Dataset has been norimalized!')
-        return self.obs_mean, self.obs_std
-
-
-
-
-#plot_dataset_coverage('Navigation_Mujoco_dataset_S1.h5')
-#plot_dataset_coverage('Navigation_Mujoco_dataset_expert_S1.h5')
-
-#buffer, buffer_state, env_params = make_item_buffer('Navigation_Mujoco_dataset_S1.h5')
-
-
-
-
-#test = sample_item_buffer(file_path='Navigation_Mujoco_dataset_S1.h5')
-#obs,next_obs,goal_obs, actions, terminals= test.prepare_expert_evaluation()
-#reward, done, _ = test.calculate_reward(obs,next_obs,goal_obs, terminals)
-#N = np.where(done==1)[0][0]
-#new_reward = reward[:N+1]
-#print(new_reward)
-#gamma_array = jnp.array([0.99**i for i in range(N+1)])
-#Return = (new_reward * gamma_array).sum()
-#print(Return)
-
-#test.sample1()
-##state, goal_state, action, next_state, reward, done = test.sample1(batch_size=256 ,sequence_length=512)
-#print(state.shape, action.shape, next_state.shape, reward.shape, done.shape)
