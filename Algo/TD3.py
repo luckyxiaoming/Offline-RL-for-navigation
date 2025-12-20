@@ -34,53 +34,68 @@ class QNetwork(eqx.Module):
     Critic: Q(s, g, a)
     Input: Concatenation of [State, Goal, Action_Norm]
     """
-    action_dim: int
+
     proj_state: nn.Sequential
     backbone: nn.Sequential
     action_proj: nn.Sequential
     head: nn.Linear
 
-    def __init__(self, key: PRNGKeyArray, obs_size: int, action_dim: int):
-        keys = jax.random.split(key, 6)
+    action_dim: int = eqx.field(static=True)
+    history_length: int = eqx.field(static=True)
+    single_obs_size: int = eqx.field(static=True)
+
+    def __init__(self, key: PRNGKeyArray, obs_size: int, history_length: int, action_dim: int):
+        keys = jax.random.split(key, 7)
         self.action_dim = action_dim
-        
+        self.history_length = history_length
+        self.single_obs_size = obs_size // history_length
+
         self.proj_state = nn.Sequential([
-            nn.Linear(in_features=obs_size, out_features=512, key=keys[0]),
+            # Layer 1: Compress slightly (1024 -> 512)
+            nn.Linear(in_features=self.single_obs_size, out_features=512, key=keys[0]),
             nn.LayerNorm(shape=512, elementwise_affine=True), 
+            nn.Lambda(jax.nn.leaky_relu),
+            # Layer 2: Project to latent dim (512 -> 256)
+            nn.Linear(in_features=512, out_features=256, key=keys[1]), # Use a new key!
+            nn.LayerNorm(shape=256, elementwise_affine=True), 
             nn.Lambda(jax.nn.leaky_relu),
         ])
 
         self.action_proj = nn.Sequential([
-            nn.Linear(action_dim, 256, key=keys[1]),
+            nn.Linear(action_dim, 256, key=keys[2]),
             nn.LayerNorm(256, elementwise_affine=True),
             nn.Lambda(jax.nn.leaky_relu),
         ])
        
-        # Input dim = 512(s_proj) + 512 (g_proj) + 256 (a_proj)
+        # Input dim = 256(s_proj)*n + 256 (g_proj) + 256 (a_proj)
         self.backbone = nn.Sequential([
-            nn.Linear(512 * 2 + 256, 512, key=keys[2]),
-            nn.LayerNorm(512, elementwise_affine=True),
-            nn.Lambda(jax.nn.leaky_relu),
-            nn.Linear(512, 512, key=keys[3]),
+            nn.Linear(256 * history_length + 256 + 256, 512, key=keys[3]),
             nn.LayerNorm(512, elementwise_affine=True),
             nn.Lambda(jax.nn.leaky_relu),
             nn.Linear(512, 512, key=keys[4]),
+            nn.LayerNorm(512, elementwise_affine=True),
+            nn.Lambda(jax.nn.leaky_relu),
+            nn.Linear(512, 512, key=keys[5]),
             nn.Lambda(jax.nn.leaky_relu),
         ])
 
-        self.head = nn.Linear(512, 1, key=keys[5])
+        self.head = nn.Linear(512, 1, key=keys[6])
 
     def get_features(self, state: Array, goal_state: Array, action: Array):
+        
+
         state = state.astype(jnp.float32)
         goal_state = goal_state.astype(jnp.float32)
         action = action.astype(jnp.float32)
         
+        s_separated = jnp.reshape(state, (self.history_length, self.single_obs_size))
 
-        s_proj = self.proj_state(state) 
+        s_proj = jax.vmap(self.proj_state)(s_separated) 
+        s_emb = jnp.reshape(s_proj, (-1,))
         g_proj = self.proj_state(goal_state)
         a_proj = self.action_proj(action)
 
-        x = jnp.concatenate([s_proj, g_proj, a_proj], axis=-1)
+        x = jnp.concatenate([s_emb, g_proj, a_proj], axis=-1)
         features = self.backbone(x)
         return features
 
@@ -167,27 +182,38 @@ class Actor(eqx.Module):
     action_dim: int 
     action_scale: Any = eqx.field(static=True)
     action_bias: Any = eqx.field(static=True)
+    history_length: int = eqx.field(static=True)
+    single_obs_size: int = eqx.field(static=True)
     proj_state: nn.Sequential
     backbone: nn.Sequential
     head: nn.Sequential
 
 
-    def __init__(self, key: PRNGKeyArray, obs_size: int, action_dim: int, action_scale, action_bias):
-        keys = jax.random.split(key, 5)
+    def __init__(self, key: PRNGKeyArray, obs_size: int, history_length: int, action_dim: int, action_scale, action_bias):
+        keys = jax.random.split(key, 6)
         self.action_bias = action_bias.tolist()
         self.action_scale = action_scale.tolist()
         self.action_dim = action_dim
+        self.history_length = history_length
+        self.single_obs_size = obs_size // history_length
 
 
+        
         self.proj_state = nn.Sequential([
-            nn.Linear(in_features=obs_size, out_features=512, key=keys[1]),
-            nn.LayerNorm(shape=512, elementwise_affine=True),
+            # Layer 1: Compress slightly (1024 -> 512)
+            nn.Linear(in_features=self.single_obs_size, out_features=512, key=keys[0]),
+            nn.LayerNorm(shape=512, elementwise_affine=True), 
+            nn.Lambda(jax.nn.leaky_relu),
+            # Layer 2: Project to latent dim (512 -> 256)
+            nn.Linear(in_features=512, out_features=256, key=keys[1]), # Use a new key!
+            nn.LayerNorm(shape=256, elementwise_affine=True), 
             nn.Lambda(jax.nn.leaky_relu),
         ])
 
 
+
         self.backbone = nn.Sequential([
-            nn.Linear(in_features=512 * 2, out_features=512, key=keys[2]),
+            nn.Linear(in_features=256 * self.history_length + 256, out_features=512, key=keys[2]),
             nn.LayerNorm(shape=512, elementwise_affine=True),
             nn.Lambda(jax.nn.leaky_relu),
             nn.Linear(in_features=512, out_features=512, key=keys[3]),
@@ -200,7 +226,7 @@ class Actor(eqx.Module):
 
 
         # Initialize last layer weights to be small for stability
-        last_layer = nn.Linear(in_features=512, out_features=action_dim, key=keys[0])
+        last_layer = nn.Linear(in_features=512, out_features=action_dim, key=keys[5])
         last_layer = eqx.tree_at(
             where=lambda l: l.weight, pytree=last_layer, replace_fn=lambda w: w * 1e-4
         )
@@ -217,10 +243,14 @@ class Actor(eqx.Module):
         state = state.astype(jnp.float32)
         goal_state = goal_state.astype(jnp.float32)
 
-        s_proj = self.proj_state(state) 
+        s_separated = jnp.reshape(state, (self.history_length, self.single_obs_size))
+
+        
+        s_proj = jax.vmap(self.proj_state)(s_separated) 
+        s_emb = jnp.reshape(s_proj, (-1,)) 
         g_proj = self.proj_state(goal_state)
 
-        x = jnp.concatenate([s_proj, g_proj], axis=-1)
+        x = jnp.concatenate([s_emb, g_proj], axis=-1)
         features = self.backbone(x)
         return features
 
@@ -246,7 +276,7 @@ class TD3(object):
         self.args = args
         self.total_it = 0
         self.policy_frequency = args.policy_frequency
-        obs_size = args.env_params['observation_size']
+        obs_size = args.env_params['observation_size'] * args.history_length
         action_dim = args.env_params['action_dimension']
      
         action_high = jnp.array(args.env_params['action_space_high'])
@@ -274,13 +304,13 @@ class TD3(object):
         self.key = keys[6]
         
         # 1. Initialize Networks
-        self.actor = Actor(key=keys[0], obs_size=obs_size, action_dim=action_dim, action_scale=self.action_scale, action_bias=self.action_bias)
-        self.actor_target = Actor(key=keys[3], obs_size=obs_size, action_dim=action_dim, action_scale=self.action_scale, action_bias=self.action_bias)
+        self.actor = Actor(key=keys[0], obs_size=obs_size, history_length=args.history_length, action_dim=action_dim, action_scale=self.action_scale, action_bias=self.action_bias)
+        self.actor_target = Actor(key=keys[3], obs_size=obs_size, history_length=args.history_length, action_dim=action_dim, action_scale=self.action_scale, action_bias=self.action_bias)
         
-        self.qf1 = QNetwork(key=keys[1], obs_size=obs_size, action_dim=action_dim)
-        self.qf2 = QNetwork(key=keys[2], obs_size=obs_size, action_dim=action_dim)
-        self.qf1_target = QNetwork(key=keys[4], obs_size=obs_size, action_dim=action_dim)
-        self.qf2_target = QNetwork(key=keys[5], obs_size=obs_size, action_dim=action_dim)
+        self.qf1 = QNetwork(key=keys[1], obs_size=obs_size, history_length=args.history_length, action_dim=action_dim)
+        self.qf2 = QNetwork(key=keys[2], obs_size=obs_size, history_length=args.history_length, action_dim=action_dim)
+        self.qf1_target = QNetwork(key=keys[4], obs_size=obs_size, history_length=args.history_length, action_dim=action_dim)
+        self.qf2_target = QNetwork(key=keys[5], obs_size=obs_size, history_length=args.history_length, action_dim=action_dim)
 
         self.Qpredictor = QPredictor(key=keys[6], feature_dim=512, obs_dim=obs_size)    
         self.Apredictor = APredictor(key=keys[7], feature_dim=512, obs_dim=obs_size, action_dim=action_dim) 
@@ -299,10 +329,15 @@ class TD3(object):
                             transition_begin= args.total_offline_steps/8,
                             transition_steps= args.total_offline_steps)
         
+        self.noise_scheduler = optax.linear_schedule(
+                    init_value=args.policy_noise,
+                    end_value= 0.01 * args.policy_noise,
+                    transition_begin= args.total_offline_steps/8,
+                    transition_steps= args.total_offline_steps)
 
 
 
-        # Optimizer Chains
+        # Optimizer ChainsW
         self.actor_optimizer = optax.chain(optax.clip_by_global_norm(10), optax.adamw(learning_rate=actor_scheduler))
         self.qf1_optimizer = optax.chain(optax.clip_by_global_norm(10), optax.adamw(learning_rate=Q_scheduler))
         self.qf2_optimizer = optax.chain(optax.clip_by_global_norm(10), optax.adamw(learning_rate=Q_scheduler))
@@ -527,7 +562,7 @@ class TD3(object):
 
         self.actor_target, self.qf1, self.qf1_optimizer_state, self.qf2, self.qf2_optimizer_state, \
             self.loss_qf1, self.loss_qf2, self.key, self.wandb_log_Q = self.update_q_function(
-            policy_noise=self.args.policy_noise, noise_clip=self.args.noise_clip,
+            policy_noise=self.noise_scheduler(self.total_it), noise_clip=self.args.noise_clip,
             gamma=self.args.gamma,
             actor_target=self.actor_target, 
             qf1=self.qf1, qf1_target=self.qf1_target, qf1_optimizer=self.qf1_optimizer,
@@ -660,8 +695,48 @@ def main(args):
                     'loss_Qpred': td3.wandb_log_P['loss_Qpred'],
                  })
         
+        # Calculate Fitted Q Evaluation 
+        if (step+1) % 30000 == 0:
+            t1 = time.time()
+            ReplayBuffer.batch_size = 512*20
+            obs, g_obs, act, next_obs, rew, done, mask = ReplayBuffer.sample_value_batch()
+            
+            ReplayBuffer.batch_size = args.batch_size
+
+            # Normalize action
+            act_norm = (act - action_bias) / action_scale
+            done =  np.expand_dims(done, axis=1)
+            obs_Q_feature = jax.vmap(td3.qf1.get_features)(obs, g_obs, act_norm)
+            next_pi_action_norm = jax.vmap(td3.actor)(next_obs, g_obs)
+            next_obs_Q_feature = jax.vmap(td3.qf1.get_features)(next_obs, g_obs, next_pi_action_norm)
+            fqe_loss = fqe.linear_regression(z=obs_Q_feature, next_z=next_obs_Q_feature, rewards=rew, done=done)
+            
+            # eva
+            obs_s0 = jnp.array(ReplayBuffer.S0)
+            obs_sg = jnp.array(ReplayBuffer.Send)
+            pi_action_at_s_norm = jax.vmap(td3.actor)(obs_s0, obs_sg)
+            S0_Q_feature = jax.vmap(td3.qf1.get_features)(obs_s0, obs_sg, pi_action_at_s_norm)
+
+            fqe_value = fqe.evaluate(z=S0_Q_feature)
+
+            if args.track:
+                    wandb.log({
+                       # 'Metrics/Mean of Metrics 1:E_expert(Q(s_expert,a,s_g) -(r+ r(Q(s,pi(s),s_g))))': EE1,
+                       # 'Metrics/Mean of Metrics 2: E(Q(s_expert, pi(s), s_g)) ': EE2,
+                      #  'Metrics/Mean of Metrics 3: E(Q(s_expert, pi(s), s_g)) - E_expert(Q(s_expert,a,s_g) -(r+ r(Q(s,pi(s),s_g)))) ': EE3,
+                      #  'Metrics/Mean of Metrics 4: E(Q(s_expert, pi(s), s_g) - Q(s_expert,a,s_g)) ': EE4,
+                      #  'Metrics/Expert Discounted Return mean': expert_returns_mean,
+                        'Metrics/FQE Loss': fqe_loss,
+                        'Metrics/FQE Estimated Value': fqe_value.mean(),
+                    #    'The mean of Cosine Similarity to next_state from Q': cos_sim_qpred_mean,
+                    #    'The mean of Cosine Similarity to next_state from policy': cos_sim_apred_mean
+                    })
+            print(f'spend time for calculating metrics: {time.time() - t1} seconds at step {step} ')
+
+
+
         # Calculate 2 metrics for detecing possible overfitting
-        if (step+1) % 20000 == 0:
+        if (step+1) % 2000000000 == 0:
             t1 = time.time()
             # Evaluate on Expert Data
 
@@ -805,7 +880,7 @@ def main(args):
 
 
         # Online Evaluation every 10k steps
-        if (step+1) % 20000 ==0:
+        if (step+1) % 30000 ==0:
 
             # our metrics
             tn = 0
@@ -823,7 +898,7 @@ def main(args):
                 initial_pos = ReplayBuffer.GOALS[goal]['initial_position'][:]
                 initial_quat = ReplayBuffer.GOALS[goal]['initial_quaternion'][:]
                 initial_distance = ReplayBuffer.GOALS[goal]['initial_distance']
-                trans, frame_list = eval_env.online_evaluation(td3.actor, goal_feature, goal_pos, initial_pos, initial_quat, name=name2, done_threshold=args.done_threshold) 
+                trans, frame_list = eval_env.online_evaluation(td3.actor, goal_feature, goal_pos, initial_pos, initial_quat, name=name2, args=args) 
                 states = trans['features']
                 next_states = trans['next_features']
                 traj_pos = trans['positions']
@@ -860,7 +935,6 @@ def main(args):
                 print(f"Discounted Return for expert {goal}: ", Discount_Return, 'length of trajectory: ', index+1, 'reach goal: ', reach_goal)
                 if reach_goal:
                     success_count +=1
-                if (step+1) % 200000 ==0:
                     media.show_video(frame_list, fps=10)
                     media.write_video(f"evaluation_{name}_{name2}.mp4", frame_list, fps=10)
 
@@ -876,7 +950,7 @@ def main(args):
                        'Online evaluation/Score(full is 1)': Score
                     })
          
-        if (step+1) % 20000 == 0:
+        if (step+1) % 30000 == 0:
             td3.save_model(step=step)
     
     wandb.finish()
@@ -887,13 +961,20 @@ if __name__ == "__main__":
     args = tyro.cli(Args)
 
 
+
+    
+    #args = tyro.cli(Args)
+   # args.exp_name = 'spare+HER_reward'
+   # args.alpha = 0.05
+   # args.env_id = '1Hz-2history_Sparse+HER_0.05bc' 
+  #  main(args)
+
     args = tyro.cli(Args)
+    args.value_sample_ratios= (0.1, 0.2, 0.2, 0.5)
     args.exp_name = 'spare+HER_reward'
-    args.alpha = 0.001
-    args.env_id = '4X_Sparse+HER_0.001bc' 
+    args.alpha = 0.01
+    args.env_id = '2Hz-2history+filter_Sparse+Red+0.99Gamma+HER_0.01bc' 
     main(args)
-
-
 
 
 

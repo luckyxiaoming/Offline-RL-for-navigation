@@ -17,7 +17,8 @@ import h5py
 import torch
 import gc
 from pynput import keyboard
-
+import torch.nn.functional as F
+from dataclasses import dataclass
 
 '''
 frames extraction function cannot work in brax env(MJX), so mujoco is used here.
@@ -178,7 +179,8 @@ def cal_z_from_quat(Q):
 
 
 class Navigation_sim_environment():
-  def __init__(self, args):
+  def __init__(self, args=None):
+    args = Args()
 
    
 
@@ -303,23 +305,29 @@ class Navigation_sim_environment():
   
 
           
-  def online_evaluation(self, actor, goal_state, goal_pos, initial_pos, initial_quat, name, done_threshold):
+  def online_evaluation(self, actor, goal_state, goal_pos, initial_pos, initial_quat, name, args):
     full = False
+    done_threshold = args.done_threshold
     desired_transitions = None
     self.frame_list = []
     self.reset(initial_pos=initial_pos, initial_quat=initial_quat)
     try_number = 0
-    image, feature, done, next_pos, next_quat = self.step([0,0,0])
+    image, feature, std, done, next_pos, next_quat = self.step([0,0,0])
+    history_length = args.history_length
+    norms = np.linalg.norm(feature, axis=-1, keepdims=True)
+    feature = feature / (norms + 1e-8)
+
+    feature_history = [feature for _ in range(history_length)]
+    obs = np.concatenate(feature_history, axis=-1)
     while not full:
       ## detect collision
       collision = True
  
         # Simple Normalization
       
-      norms = np.linalg.norm(feature, axis=-1, keepdims=True)
-      feature = feature / (norms + 1e-8)
 
-      command = actor.get_eval_action(feature.reshape([1024]), goal_state.reshape([1024]))
+
+      command = actor.get_eval_action(obs.reshape([1024*history_length]), goal_state.reshape([1024]))
 
       next_pos1, next_quat = self.cal_command_without_change_env(command)
       next_pos = np.round(next_pos1, 4)
@@ -334,14 +342,15 @@ class Navigation_sim_environment():
 
       transitions = self.controller(command, collision=collision)
       feature = transitions['features'][-1]
+      feature_history = feature_history[1:] + [feature]
+      obs = np.concatenate(feature_history, axis=-1)
       cos_sim =calculate_cosine_similarity(feature.reshape([1024]), goal_state.reshape([1024]))
+
+      desired_transitions, full = self.update_desired_transition(desired_transitions, transitions, max_steps= 300)
       if cos_sim > done_threshold:
           print(f"Reach goal with cosine similarity {cos_sim:.4f}")
           full = True
-      
-      
-
-      desired_transitions, full = self.update_desired_transition(desired_transitions, transitions, max_steps= 300)
+    
     #media.show_video(self.frame_list, fps=10)
     #media.write_video(f"evaluation_{name}.mp4", self.frame_list, fps=10)
 
@@ -391,9 +400,20 @@ class Navigation_sim_environment():
     inputs = self.processor(images=image, return_tensors="pt").to(self.device)
     with torch.no_grad(): #
         outputs = self.model(**inputs)
-    pooler_output = outputs.pooler_output
-    return pooler_output.cpu().numpy()
+    
+    std, feature = self.spatial_std(outputs.last_hidden_state)
+    return feature, std
   
+  def spatial_std(self, dino_output_patches):
+    patch_tokens = dino_output_patches[:, 5:, :]
+    feats = F.normalize(patch_tokens, p=2, dim=-1)
+    spatial_std = feats.std(dim=1).mean(dim=-1)
+    feature = dino_output_patches[:, 0, :].squeeze().cpu().numpy()  
+    return spatial_std.item(), feature
+
+
+
+
   def reset(self, initial_pos=[0,0],initial_quat=[1,0,0,0]):
     self.steps = 0
     self.image_list = []
@@ -487,12 +507,13 @@ class Navigation_sim_environment():
     self.renderer.update_scene(self.mj_data, 'came')
     image = self.renderer.render()
     if use_Dinov3:
-      feature = self.cal_latent(image).squeeze()
+      feature, std = self.cal_latent(image)
     else:
        feature = jnp.zeros([1024,])
+       std = 0.0
     done = collision
 
-    return image, feature, done, next_pos, next_quat
+    return image, feature, std, done, next_pos, next_quat
   
   
 
@@ -507,9 +528,14 @@ class Navigation_sim_environment():
       self.current_command = np.array(command).reshape([3])
 
 
-    image, feature, done, next_pos, next_quat = self.step([0,0,0])
+    image, feature, std, done, next_pos, next_quat = self.step([0,0,0])
+
+
+
     self.image_list = []
     self.feature_list = []
+    self.std_list = []
+    self.next_std_list = []
     self.next_image_list = []
     self.next_feature_list = []
     self.action_list = []
@@ -520,8 +546,12 @@ class Navigation_sim_environment():
 
    # plt.show()
 
+    norms = np.linalg.norm(feature, axis=-1, keepdims=True)
+    feature = feature / (norms + 1e-8)
+
     self.image_list.append(image)
     self.frame_list.append(image)
+    self.std_list.append(std)
     self.feature_list.append(feature)
     self.position_list.append(next_pos)
     self.quaterion_list.append(next_quat)
@@ -530,18 +560,23 @@ class Navigation_sim_environment():
 
   
 
-    image, feature, done, next_pos, next_quat = self.step(action, use_Dinov3=False)
-    image, feature, done, next_pos, next_quat = self.step([0,0,0])
+    image, feature, std, done, next_pos, next_quat = self.step(action, use_Dinov3=False)
+    image, feature, std, done, next_pos, next_quat = self.step([0,0,0])
+
+    norms = np.linalg.norm(feature, axis=-1, keepdims=True)
+    feature = feature / (norms + 1e-8)
 
     
     done = jnp.array(done).reshape([1])
     self.next_image_list.append(image)
     self.next_feature_list.append(feature)
+    self.next_std_list.append(std)
     self.done_list.append(done)
     images = np.stack(self.image_list, axis=0)
     features = np.stack(self.feature_list, axis=0)
     actions = np.stack(self.action_list, axis=0)
-
+    stds = np.stack(self.std_list, axis=0)
+    next_stds = np.stack(self.next_std_list, axis=0)
     positions = np.stack(self.position_list, axis=0)
     quaterions = np.stack(self.quaterion_list, axis=0)
     next_features = np.stack(self.next_feature_list, axis=0)
@@ -552,9 +587,11 @@ class Navigation_sim_environment():
     transition = {
     'images': images,
     'features': features,
+    'stds': stds,
     "actions": actions, 
     "next_images": next_images,
     'next_features': next_features,
+    'next_stds': next_stds,
     'positions': positions,
     'quaterions': quaterions,
     "dones": dones,
@@ -640,7 +677,7 @@ class Navigation_sim_environment():
               time.sleep(0.1)
               commands = [0.0, 0.0, 0.0]
               desired_transitions, full = self.update_desired_transition(desired_transitions, transitions, max_steps= 1000)
-              print('current expert position:',transitions['positions'][-1], "current quaterion:", transitions['quaterions'][-1])
+              print('current expert position:',transitions['positions'][-1])
 
 
         
@@ -931,29 +968,32 @@ def analyze_dataset(file_path):
 
 
 
-
-
-
-from dataclasses import dataclass
-
 @dataclass
 class Args:
-    action_min = np.array([0.0, -0.1, -0.1])
-    action_max = np.array([0.2, 0.1, 0.1])
-    beta = 1.0
-    train_dataset_name = 'Mujoco_training_dataset_pink_2HZ.h5'
-
-args = Args()
-
-test = Navigation_sim_environment(args=args)
-#test.create_expert_trajectory('_4X')
-#test.create_test_data('_target')
-test.make_h5py_file(seeds=100, episode_size=320, episode_num = 24 , save_images=False)
+      action_min = np.array([0.0, -0.1, -0.1])
+      action_max = np.array([0.2, 0.1, 0.1])
+      beta = 2.0
+      train_dataset_name = 'Mujoco_training_dataset_red_2HZ.h5'
 
 
-#file_path = f"/home/xiaoming/Research/Offline RL/12_offline_RL/{args.train_dataset_name}"
-#analyze_dataset(file_path)  
-    
+
+
+if __name__ == "__main__":
+
+
+
+
+
+  args = Args()
+  test = Navigation_sim_environment(args=args)
+  #test.create_expert_trajectory('_4X222222')
+  #test.create_test_data('_target')
+  test.make_h5py_file(seeds=100, episode_size=320, episode_num = 24, save_images=False)
+
+
+  file_path = f"/home/xiaoming/Research/Offline RL/12_offline_RL/{args.train_dataset_name}"
+  analyze_dataset(file_path)  
+      
 
 
 #

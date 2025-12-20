@@ -5,10 +5,10 @@ from dataclasses import dataclass
 class Args:
     seed: int = 42
     
-    training_dataset_filepath : str = 'Navigation_Mujoco_dataset_pink_4X.h5'
+    training_dataset_filepath : str = 'Mujoco_training_dataset_red_2HZ.h5'
     target_file_path : str = 'Navigation_Mujoco_dataset_target_expert_12.1.h5'
     add_expert_data_filepath: str = None
-    expert_file_path: str = 'Navigation_Mujoco_dataset_expert_4x.h5'
+    expert_file_path: str = None
     
     exp_name: str = "experiment"
     
@@ -22,7 +22,7 @@ class Args:
     # Algorithm specific arguments
     total_offline_steps: int = 800_000
     '''the discount factor gamma'''
-    gamma: float = 0.95
+    gamma: float = 0.99
     '''the target network update rate'''
     tau: float = 0.005
 
@@ -48,6 +48,12 @@ class Args:
     load_model_path: str = None
 
     feature_dim: int = 512
+
+    history_length: int = 2
+
+    # 14*14 patches' std in observation encoder, used for uncertainty estimation
+    # Any image'std value below this threshold will be considered as a bad goal!
+    std_threshold: float = 0.0201
 
 
 
